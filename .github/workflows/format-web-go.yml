@@ -1,0 +1,28 @@
+name: Apply Go formatting (temporary)
+on:
+  push:
+    branches: [feat/nextjs-web-app]
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/nextjs-web-app
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - run: |
+          find cmd internal -name '*.go' -print0 | xargs -0 gofmt -w
+          git diff --stat
+          if ! git diff --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add cmd internal
+            git commit -m 'style(go): format new API handlers'
+            git push origin HEAD:feat/nextjs-web-app
+          fi
