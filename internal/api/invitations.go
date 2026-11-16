@@ -77,21 +77,21 @@ func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request) {
 	var dailyCount, hourlyRecipientCount int
 	err = tx.QueryRow(r.Context(), `SELECT count(*),count(*) FILTER (WHERE email=$2 AND created_at>now()-interval '1 hour')
 		FROM organization_invitations WHERE organization_id=$1 AND created_at>now()-interval '24 hours'`,
-		r.PathValue("org"), email).Scan(&dailyCount,&hourlyRecipientCount)
+		r.PathValue("org"), email).Scan(&dailyCount, &hourlyRecipientCount)
 	if err != nil {
-		fail(w,503,"unavailable")
+		fail(w, 503, "unavailable")
 		return
 	}
-	if dailyCount>=30 || hourlyRecipientCount>=3 {
-		fail(w,429,"invitation rate limited")
+	if dailyCount >= 30 || hourlyRecipientCount >= 3 {
+		fail(w, 429, "invitation rate limited")
 		return
 	}
 	// A resend supersedes older links rather than leaving multiple valid capabilities.
 	_, err = tx.Exec(r.Context(), `UPDATE organization_invitations SET revoked_at=now()
 		WHERE organization_id=$1 AND email=$2 AND revoked_at IS NULL AND accepted_at IS NULL`,
-		r.PathValue("org"),email)
+		r.PathValue("org"), email)
 	if err != nil {
-		fail(w,503,"unavailable")
+		fail(w, 503, "unavailable")
 		return
 	}
 	var id, orgName string

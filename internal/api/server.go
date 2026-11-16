@@ -473,7 +473,7 @@ func (s *Server) listOrganizations(w http.ResponseWriter, r *http.Request) {
 			fail(w, 503, "unavailable")
 			return
 		}
-		out = append(out, map[string]string{"id": id, "name": name, "role": role,"kind":kind,"country":country})
+		out = append(out, map[string]string{"id": id, "name": name, "role": role, "kind": kind, "country": country})
 	}
 	if rows.Err() != nil {
 		fail(w, 503, "unavailable")
