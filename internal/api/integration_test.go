@@ -109,6 +109,7 @@ func TestPostgresSmoke(t *testing.T) {
 	call("GET", "/v1/organizations", owner, nil, 200)
 	call("GET", "/v1/organizations/"+org+"/properties", outsider, nil, 403)
 	call("POST", "/v1/organizations/"+org+"/members", owner, map[string]any{"phone": inspectorPhone, "role": "inspector"}, 201)
+	call("POST", "/v1/organizations/"+org+"/members", owner, map[string]any{"phone": inspectorPhone, "role": "manager"}, 409)
 	call("POST", "/v1/organizations/"+org+"/members", inspector, map[string]any{"phone": outsiderPhone, "role": "manager"}, 403)
 	call("POST", "/v1/organizations/"+org+"/properties", inspector, map[string]any{"name": "Forbidden"}, 403)
 
