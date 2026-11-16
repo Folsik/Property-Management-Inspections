@@ -52,6 +52,7 @@ func TestGuidedOnboardingAndInvitations(t *testing.T) {
  call("GET","/v1/onboarding",owner,nil,200)
  call("POST","/v1/onboarding/complete",owner,map[string]string{},409)
  call("POST","/v1/auth/pin",owner,map[string]string{"pin":"918245"},200)
+ call("PATCH","/v1/me",owner,map[string]string{"full_name":"Property Owner"},200)
  email:=fmt.Sprintf("onboarding-%d@example.test",stamp)
  challenge:=call("POST","/v1/email/request",owner,map[string]string{"email":email},202)
  if challenge["dev_code"]==nil {t.Fatal("development email challenge missing")}
@@ -76,6 +77,7 @@ func TestGuidedOnboardingAndInvitations(t *testing.T) {
  emailCode:=call("POST","/v1/email/request",worker,map[string]string{"email":workerEmail},202)["dev_code"].(string)
  call("POST","/v1/email/verify",worker,map[string]string{"email":workerEmail,"code":emailCode},200)
  call("POST","/v1/auth/pin",worker,map[string]string{"pin":"918245"},200)
+ call("PATCH","/v1/me",worker,map[string]string{"full_name":"Invited Inspector"},200)
  call("POST","/v1/invitations/"+inviteToken+"/accept",worker,map[string]string{},200)
  call("POST","/v1/invitations/"+inviteToken+"/accept",worker,map[string]string{},409)
  call("GET","/v1/invitations/"+inviteToken,"",nil,404)
