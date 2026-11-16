@@ -37,7 +37,7 @@ func TestPostgresSmoke(t *testing.T) {
 		t.Fatalf("idempotent database migration: %v", err)
 	}
 	var versions int
-	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 2 {
+	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 4 {
 		t.Fatalf("migration versions: count=%d err=%v", versions, err)
 	}
 	tokens, err := auth.NewManager("integration-test", 15*time.Minute)
@@ -120,6 +120,57 @@ func TestPostgresSmoke(t *testing.T) {
 	itemRequest := map[string]any{"client_id": clientID, "title": "Leaking tap", "severity": "high"}
 	call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/items", inspector, itemRequest, 201)
 	call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/items", outsider, itemRequest, 403)
+
+	// Read paths and status transitions used by the Next.js workspace.
+	inspections := call("GET", "/v1/organizations/"+org+"/inspections", owner, nil, 200)
+	if len(inspections["items"].([]any)) != 1 {
+		t.Fatalf("expected one live inspection: %#v", inspections)
+	}
+	call("GET", "/v1/organizations/"+org+"/inspections/"+inspection, owner, nil, 200)
+	call("GET", "/v1/organizations/"+org+"/inspections/"+inspection, outsider, nil, 403)
+	issues := call("GET", "/v1/organizations/"+org+"/inspections/"+inspection+"/items", inspector, nil, 200)
+	if len(issues["items"].([]any)) != 1 {
+		t.Fatalf("expected one live punch-list item: %#v", issues)
+	}
+	itemID := issues["items"].([]any)[0].(map[string]any)["id"].(string)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection+"/items/"+itemID, inspector, map[string]any{"status": "resolved"}, 200)
+	call("GET", "/v1/organizations/"+org+"/inspections/"+inspection+"/media", owner, nil, 200)
+	team := call("GET", "/v1/organizations/"+org+"/members", owner, nil, 200)
+	if len(team["items"].([]any)) != 2 {
+		t.Fatalf("expected owner and inspector: %#v", team)
+	}
+	call("GET", "/v1/organizations/"+org+"/members", outsider, nil, 403)
+	createdContact := call("POST", "/v1/organizations/"+org+"/contacts", owner, map[string]any{
+		"name": "Tenant Contact", "category": "tenant", "phone": outsiderPhone, "property_id": property,
+	}, 201)
+	if createdContact["name"] != "Tenant Contact" {
+		t.Fatal("contact did not persist")
+	}
+	contacts := call("GET", "/v1/organizations/"+org+"/contacts", owner, nil, 200)
+	if len(contacts["items"].([]any)) != 1 {
+		t.Fatalf("expected one real contact: %#v", contacts)
+	}
+	call("GET", "/v1/organizations/"+org+"/contacts", inspector, nil, 403)
+	call("POST", "/v1/organizations/"+org+"/contacts", outsider, map[string]any{
+		"name": "Other", "category": "tenant",
+	}, 403)
+	call("GET", "/v1/organizations/"+org+"/jobs", owner, nil, 200)
+	// A guest can read only an explicitly shared report; revocation invalidates it.
+	link := call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/share", owner, map[string]any{}, 201)
+	token := link["token"].(string)
+	report := call("GET", "/v1/public/reports/"+token, "", nil, 200)
+	if report["property_name"] != "Apartment A" {
+		t.Fatalf("guest report uses unexpected property: %#v", report)
+	}
+	call("GET", "/v1/organizations/"+org+"/inspections/"+inspection+"/shares", owner, nil, 200)
+	call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/share", outsider, map[string]any{}, 403)
+	call("DELETE", "/v1/organizations/"+org+"/shares/"+link["id"].(string), owner, nil, 200)
+	call("GET", "/v1/public/reports/"+token, "", nil, 404)
+	call("PATCH", "/v1/me", owner, map[string]any{"full_name": "Property Owner"}, 200)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection, inspector, map[string]any{"status": "in_progress"}, 200)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection, inspector, map[string]any{"status": "completed"}, 200)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection, inspector, map[string]any{"status": "draft"}, 400)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection+"/items/"+itemID, inspector, map[string]any{"status": "open"}, 409)
 
 	call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/media/presign", inspector, map[string]any{"mime_type": "image/jpeg", "size_bytes": 2000}, 503)
 	loginToken := pinLogin["access_token"].(string)

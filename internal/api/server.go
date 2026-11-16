@@ -43,6 +43,7 @@ func validID(id string) bool { return uuidPattern.MatchString(id) }
 func (s *Server) Handler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /healthz", s.health)
+	m.HandleFunc("GET /v1/public/reports/{token}", s.publicReport)
 	m.HandleFunc("POST /v1/auth/otp/request", s.requestOTP)
 	m.HandleFunc("POST /v1/auth/otp/verify", s.verifyOTP)
 	m.HandleFunc("POST /v1/auth/pin/login", s.pinLogin)
@@ -51,9 +52,23 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("GET /v1/me", s.protect(http.HandlerFunc(s.me)))
 	m.Handle("POST /v1/organizations", s.protect(http.HandlerFunc(s.createOrganization)))
 	m.Handle("GET /v1/organizations", s.protect(http.HandlerFunc(s.listOrganizations)))
+	m.Handle("GET /v1/organizations/{org}/members", s.protect(http.HandlerFunc(s.listMembers)))
+	m.Handle("GET /v1/organizations/{org}/jobs", s.protect(http.HandlerFunc(s.listJobs)))
+	m.Handle("PATCH /v1/me", s.protect(http.HandlerFunc(s.updateProfile)))
+	m.Handle("GET /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.listContacts)))
+	m.Handle("POST /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.createContact)))
 	m.Handle("POST /v1/organizations/{org}/members", s.protect(http.HandlerFunc(s.addMember)))
 	m.Handle("POST /v1/organizations/{org}/properties", s.protect(http.HandlerFunc(s.createProperty)))
 	m.Handle("GET /v1/organizations/{org}/properties", s.protect(http.HandlerFunc(s.listProperties)))
+	m.Handle("GET /v1/organizations/{org}/inspections", s.protect(http.HandlerFunc(s.listInspections)))
+	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/share", s.protect(http.HandlerFunc(s.shareInspection)))
+	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/shares", s.protect(http.HandlerFunc(s.listReportLinks)))
+	m.Handle("DELETE /v1/organizations/{org}/shares/{link}", s.protect(http.HandlerFunc(s.revokeReportLink)))
+	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}", s.protect(http.HandlerFunc(s.inspectionDetail)))
+	m.Handle("PATCH /v1/organizations/{org}/inspections/{inspection}", s.protect(http.HandlerFunc(s.updateInspection)))
+	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/items", s.protect(http.HandlerFunc(s.listItems)))
+	m.Handle("PATCH /v1/organizations/{org}/inspections/{inspection}/items/{item}", s.protect(http.HandlerFunc(s.updateItem)))
+	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/media", s.protect(http.HandlerFunc(s.listMedia)))
 	m.Handle("POST /v1/organizations/{org}/inspections", s.protect(http.HandlerFunc(s.createInspection)))
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/items", s.protect(http.HandlerFunc(s.addItem)))
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/media/presign", s.protect(http.HandlerFunc(s.presignMedia)))
@@ -135,11 +150,6 @@ func (s *Server) issue(w http.ResponseWriter, user string) {
 	write(w, 200, map[string]any{"access_token": token, "token_type": "Bearer", "expires_at": exp})
 }
 func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
-	// Provider integration is not ready. Never claim SMS delivery in production.
-	if s.env != "development" {
-		fail(w, 503, "OTP provider not configured")
-		return
-	}
 	var in struct {
 		Phone string `json:"phone"`
 	}
@@ -171,13 +181,42 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "unavailable")
 		return
 	}
-	_, err = s.db.Exec(r.Context(), "INSERT INTO otp_challenges(phone,code_hash,expires_at) VALUES($1,$2,now()+interval '5 minutes')", in.Phone, string(hash))
+	twilio := twilioConfigFromEnv()
+	if !twilio.configured() && s.env != "development" {
+		fail(w, 503, "OTP provider not configured")
+		return
+	}
+	// Keep challenge insertion atomic with provider delivery: unsuccessful sends never
+	// produce a usable OTP record. Production responses never expose the secret code.
+	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
 	}
-	// Local-only demo flow. API should never be exposed publicly in development.
-	write(w, 202, map[string]string{"status": "local_demo_only", "dev_code": code})
+	defer tx.Rollback(r.Context())
+	_, err = tx.Exec(r.Context(), "INSERT INTO otp_challenges(phone,code_hash,expires_at) VALUES($1,$2,now()+interval '5 minutes')", in.Phone, string(hash))
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if twilio.configured() {
+		if err := sendTwilioSMS(r.Context(), twilio, in.Phone, "Your Inspectly verification code is "+code+". It expires in 5 minutes."); err != nil {
+			s.logger.Error("OTP provider delivery failed", "error", err)
+			fail(w, 503, "OTP delivery unavailable")
+			return
+		}
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if !twilio.configured() {
+		// Only available when Go runs in development and the SMS provider is unset.
+		// Never display this secret through the browser BFF.
+		write(w, 202, map[string]string{"status": "local_demo_only", "dev_code": code})
+		return
+	}
+	write(w, 202, map[string]string{"status": "sent"})
 }
 func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 	var in struct {
