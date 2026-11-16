@@ -15,7 +15,7 @@ import {Textarea} from "@/components/ui/textarea";
 import {Card} from "@/components/ui/card";
 import {Dialog,DialogContent,DialogDescription,DialogTitle} from "@/components/ui/dialog";
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from "@/components/ui/select";
-import {endpoints,patch,post} from "@/lib/api";
+import {api,endpoints,get,patch,post} from "@/lib/api";
 import type {Inspection,InspectionItem,InspectionStatus,InspectionType,Job,Media,Member,Organization,Profile,Property,ItemStatus} from "@/lib/types";
 import {statusNames,typeNames} from "@/lib/types";
 import {cn} from "@/lib/utils";
@@ -91,6 +91,10 @@ export function Workspace(){
  const [phone,setPhone]=useState("");
  const [role,setRole]=useState<"manager"|"inspector">("inspector");
  const [pin,setPin]=useState("");
+ const [managedReport,setManagedReport]=useState("");
+ const [links,setLinks]=useState<{id:string;expires_at:string;revoked_at:string|null;created_at:string}[]>([]);
+ const [shareURL,setShareURL]=useState("");
+ const [linksLoading,setLinksLoading]=useState(false);
  const [profileName,setProfileName]=useState("");
  const activeOrg=orgs.find(o=>o.id===orgID);
  const canManage=activeOrg?.role==="owner"||activeOrg?.role==="manager";
@@ -154,14 +158,29 @@ export function Workspace(){
    await reloadWorkspace(orgID);if(selectedID)await reloadDetail(orgID,selectedID);
   }catch(e){showError(e);}finally{setSaving(false);}
  }
+ async function loadLinks(inspectionID:string){
+  setLinksLoading(true);setError("");
+  try{
+   const rows=await get<{items:{id:string;expires_at:string;revoked_at:string|null;created_at:string}[]}>(`v1/organizations/${orgID}/inspections/${inspectionID}/shares`);
+   setLinks(rows.items);
+  }catch(e){showError(e);}finally{setLinksLoading(false);}
+ }
+ function openLinks(inspectionID:string){
+  setManagedReport(inspectionID);setShareURL("");void loadLinks(inspectionID);
+ }
  async function shareReport(inspectionID:string){
   setSaving(true);setError("");
   try{
    const link=await post<{token:string;expires_at:string}>(`v1/organizations/${orgID}/inspections/${inspectionID}/share`,{});
    const url=window.location.origin+"/share/"+link.token;
-   await navigator.clipboard.writeText(url);
-   setNotice("Public guest report link copied to clipboard. It expires in 7 days.");
+   setManagedReport(inspectionID);setShareURL(url);await loadLinks(inspectionID);
+   setNotice("Share link created. Copy it now; the original token cannot be retrieved later.");
   }catch(e){showError(e);}finally{setSaving(false);}
+ }
+ async function revokeLink(linkID:string){
+  setSaving(true);setError("");
+  try{await api(`v1/organizations/${orgID}/shares/${linkID}`,{method:"DELETE"});await loadLinks(managedReport);setNotice("Guest link revoked.");}
+  catch(e){showError(e);}finally{setSaving(false);}
  }
  async function setInspectionStatus(status:InspectionStatus){
   if(!selected)return;setSaving(true);setError("");
@@ -277,7 +296,7 @@ export function Workspace(){
      {section==="reports"&&<>
       <SectionHeading eyebrow="Operations" title="Reports & AI jobs" description="Monitor background processing. Results appear only when a configured worker completes a job."/>
       <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-5"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 size-5 text-blue-600"/><div><h3 className="text-sm font-bold text-blue-900">Report generation is not yet enabled</h3><p className="mt-1 text-sm leading-relaxed text-blue-700">The database job queue is ready, but the AI/transcription and PDF workers are not deployed. No reports are generated or shown as complete until processing is implemented.</p></div></div></div>
-      <Card className="mb-6 overflow-hidden"><div className="border-b border-slate-100 px-6 py-5"><h2 className="text-base font-bold">Print-ready inspection reports</h2><p className="mt-1 text-xs text-slate-400">Export actual inspection records through your browser’s Print / Save as PDF feature</p></div>{inspections.length?<div className="divide-y divide-slate-100">{inspections.map(report=><div key={report.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div><p className="text-sm font-bold">{report.property_name}</p><p className="mt-1 text-xs text-slate-400">{typeNames[report.type]} · {humanDate(report.created_at)} · {report.total_items} items</p></div><div className="flex flex-wrap gap-2"><a target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50" href={`/report/${orgID}/${report.id}`}><FileText className="size-4"/>Open report</a>{canManage&&<Button variant="outline" size="sm" disabled={saving} onClick={()=>void shareReport(report.id)}><ExternalLink className="size-4"/>Share link</Button>}</div></div>)}</div>:<Empty icon={FileText} title="No inspections to export" description="Create an inspection to generate a print-ready record from real data."/>}</Card>
+      <Card className="mb-6 overflow-hidden"><div className="border-b border-slate-100 px-6 py-5"><h2 className="text-base font-bold">Print-ready inspection reports</h2><p className="mt-1 text-xs text-slate-400">Export actual inspection records through your browser’s Print / Save as PDF feature</p></div>{inspections.length?<div className="divide-y divide-slate-100">{inspections.map(report=><div key={report.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div><p className="text-sm font-bold">{report.property_name}</p><p className="mt-1 text-xs text-slate-400">{typeNames[report.type]} · {humanDate(report.created_at)} · {report.total_items} items</p></div><div className="flex flex-wrap gap-2"><a target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50" href={`/report/${orgID}/${report.id}`}><FileText className="size-4"/>Open report</a>{canManage&&<><Button variant="outline" size="sm" disabled={saving} onClick={()=>void shareReport(report.id)}><ExternalLink className="size-4"/>Share link</Button><Button variant="ghost" size="sm" onClick={()=>openLinks(report.id)}>Manage links</Button></>}</div></div>)}</div>:<Empty icon={FileText} title="No inspections to export" description="Create an inspection to generate a print-ready record from real data."/>}</Card>
       <Card className="overflow-hidden"><div className="border-b border-slate-100 px-6 py-5"><h2 className="text-base font-bold">Background jobs</h2><p className="mt-1 text-xs text-slate-400">Live records from the organization&apos;s job queue</p></div>{loading.workspace?<Loader/>:jobs.length?<div className="divide-y divide-slate-100">{jobs.map(job=><div key={job.id} className="flex items-center justify-between gap-3 px-6 py-4"><div><p className="text-sm font-bold capitalize">{prettyStatus(job.kind)}</p><p className="mt-1 text-xs text-slate-400">{humanDate(job.created_at)} · {job.attempts} attempts</p></div><Badge tone={statusTone(job.state)}>{prettyStatus(job.state)}</Badge></div>)}</div>:<Empty icon={FileText} title="No background jobs" description="Job activity will appear here when processing pipelines are enabled."/>}</Card>
      </>}
      {section==="settings"&&<>
@@ -291,6 +310,15 @@ export function Workspace(){
     </>}
    </main>
   </div>
+  <Dialog open={managedReport!==""} onOpenChange={open=>{if(!open){setManagedReport("");setShareURL("");setError("");}}}>
+   <DialogContent>
+    <DialogTitle className="text-lg font-bold">Guest report links</DialogTitle>
+    <DialogDescription className="mt-2 text-sm text-slate-500">Guests can view the shared inspection without an account. Links expire after 7 days and can be revoked.</DialogDescription>
+    {shareURL&&<div className="mt-5 space-y-2"><label htmlFor="guest-link" className="text-sm font-bold">New share link — copy now</label><Input id="guest-link" readOnly value={shareURL} onFocus={e=>e.currentTarget.select()}/><Button size="sm" onClick={()=>{void navigator.clipboard.writeText(shareURL).then(()=>setNotice("Link copied.")).catch(()=>setError("Clipboard unavailable. Select and copy the link manually."));}}>Copy link</Button></div>}
+    <div className="mt-6"><h3 className="mb-3 text-sm font-bold">Existing links</h3>{linksLoading?<Loader/>:links.length===0?<p className="text-sm text-slate-500">No links have been created.</p>:<div className="max-h-64 divide-y divide-slate-100 overflow-auto">{links.map(link=><div key={link.id} className="flex items-center justify-between gap-3 py-3"><div><p className="text-xs font-semibold text-slate-700">Created {humanDate(link.created_at)}</p><p className="mt-1 text-xs text-slate-500">Expires {humanDate(link.expires_at)}</p></div>{link.revoked_at?<Badge tone="red">Revoked</Badge>:new Date(link.expires_at)<new Date()?<Badge>Expired</Badge>:<Button disabled={saving} size="sm" variant="outline" onClick={()=>void revokeLink(link.id)}>Revoke</Button>}</div>)}</div>}</div>
+    {error&&<p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
+   </DialogContent>
+  </Dialog>
   <Dialog open={dialog!==null} onOpenChange={open=>{if(!open){setDialog(null);setError("");}}}>
    <DialogContent>
     <DialogTitle className="text-xl font-bold">{dialog==="organization"?"Create organization":dialog==="property"?"Add property":dialog==="inspection"?"New inspection":dialog==="member"?"Add team member":"Add punch-list item"}</DialogTitle>
