@@ -32,6 +32,8 @@ jobs:
           docker compose ps
           docker compose logs --tail=100
           exit 1
+      - name: Exercise actual OTP registration through Next.js BFF
+        run: node apps/web/tests/registration-smoke.mjs
       - name: Print logs on failure
         if: failure()
         run: docker compose logs --tail=200
