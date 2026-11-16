@@ -178,6 +178,17 @@ export function Workspace(){
    await reloadWorkspace(orgID);if(selectedID)await reloadDetail(orgID,selectedID);
   }catch(e){showError(e);}finally{setSaving(false);}
  }
+ async function resendInvitation(inv:Invitation){
+  setSaving(true);setError("");
+  try{
+   const created=await post<{token:string}>(`v1/organizations/${orgID}/invitations`,{email:inv.email,role:inv.role});
+   setInviteEmail(inv.email);setRole(inv.role);
+   setInvitationLink(window.location.origin+"/invite/"+created.token);
+   setDialog("member");
+   await reloadInvitations(orgID);
+   setNotice("New invitation issued. The previous link has been revoked.");
+  }catch(e){showError(e);}finally{setSaving(false);}
+ }
  async function revokeInvitation(invitationID:string){
   setSaving(true);setError("");
   try{await api(`v1/organizations/${orgID}/invitations/${invitationID}`,{method:"DELETE"});await reloadInvitations(orgID);setNotice("Invitation revoked.");}
@@ -317,7 +328,7 @@ export function Workspace(){
       <SectionHeading eyebrow="Collaboration" title="Team members" description="Invite teammates by email and control access to your organization's workspace." action={canManage?<Button onClick={()=>openDialog("member")}><Plus className="size-4"/>Invite member</Button>:undefined}/>
       <Card className="overflow-hidden">{loading.workspace?<Loader/>:members.length?<div className="divide-y divide-slate-100">{members.map(member=><div key={member.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-full bg-blue-50 font-bold text-blue-600">{(member.full_name||member.phone).slice(0,1).toUpperCase()}</span><div><p className="text-sm font-bold">{member.full_name||member.phone}</p><p className="mt-1 text-xs text-slate-500">{member.phone}</p></div></div><div className="flex items-center gap-4"><span className="hidden text-xs text-slate-400 sm:inline">Joined {humanDate(member.joined_at)}</span><Badge tone={member.role==="owner"?"blue":"slate"}>{member.role}</Badge></div></div>)}</div>:<Empty icon={Users} title="No team members yet" description="Invite a teammate to help with inspections."/>}</Card>
       {canManage&&<><div className="mt-7 mb-3 flex items-center justify-between"><h3 className="text-lg font-bold text-slate-900">Team invitations</h3><span className="text-xs text-slate-500">Links expire after seven days</span></div>
-       <Card className="overflow-hidden">{invitations.length?<div className="divide-y divide-slate-100">{invitations.map(inv=><div key={inv.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"><div className="min-w-0"><p className="truncate text-sm font-semibold">{inv.email}</p><p className="mt-1 text-xs text-slate-500">Role: {inv.role} · Expires {humanDate(inv.expires_at)}</p></div><div className="flex items-center gap-3">{inv.accepted_at?<Badge tone="green">Accepted</Badge>:inv.revoked_at?<Badge tone="slate">Revoked</Badge>:new Date(inv.expires_at)<=new Date()?<Badge tone="red">Expired</Badge>:<><Badge tone="amber">Pending</Badge>{(activeOrg?.role==="owner"||inv.role!=="manager")&&<Button variant="outline" size="sm" onClick={()=>void revokeInvitation(inv.id)}>Revoke</Button>}</>}</div></div>)}</div>:<Empty icon={Users} title="No invitations yet" description="Create an invitation to add your first teammate." action={<Button onClick={()=>openDialog("member")}>Invite member</Button>}/>}</Card>
+       <Card className="overflow-hidden">{invitations.length?<div className="divide-y divide-slate-100">{invitations.map(inv=><div key={inv.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"><div className="min-w-0"><p className="truncate text-sm font-semibold">{inv.email}</p><p className="mt-1 text-xs text-slate-500">Role: {inv.role} · Expires {humanDate(inv.expires_at)}</p></div><div className="flex items-center gap-3">{inv.accepted_at?<Badge tone="green">Accepted</Badge>:inv.revoked_at?<Badge tone="slate">Revoked</Badge>:new Date(inv.expires_at)<=new Date()?<Badge tone="red">Expired</Badge>:<><Badge tone="amber">Pending</Badge>{(activeOrg?.role==="owner"||inv.role!=="manager")&&<Button variant="outline" size="sm" disabled={saving} onClick={()=>void revokeInvitation(inv.id)}>Revoke</Button>}</>}{!inv.accepted_at&&(activeOrg?.role==="owner"||inv.role!=="manager")&&<Button variant="outline" size="sm" disabled={saving} onClick={()=>void resendInvitation(inv)}>Resend</Button>}}</div></div>)}</div>:<Empty icon={Users} title="No invitations yet" description="Create an invitation to add your first teammate." action={<Button onClick={()=>openDialog("member")}>Invite member</Button>}/>}</Card>
        <p className="mt-4 text-xs text-slate-500">Only verified recipients can accept an invitation. Invite links are shown once after creation; revoked or expired links cannot be reused.</p>
       </>}
      </>}
