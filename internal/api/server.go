@@ -43,6 +43,7 @@ func validID(id string) bool { return uuidPattern.MatchString(id) }
 func (s *Server) Handler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /healthz", s.health)
+	m.HandleFunc("GET /v1/public/reports/{token}", s.publicReport)
 	m.HandleFunc("POST /v1/auth/otp/request", s.requestOTP)
 	m.HandleFunc("POST /v1/auth/otp/verify", s.verifyOTP)
 	m.HandleFunc("POST /v1/auth/pin/login", s.pinLogin)
@@ -58,6 +59,9 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("POST /v1/organizations/{org}/properties", s.protect(http.HandlerFunc(s.createProperty)))
 	m.Handle("GET /v1/organizations/{org}/properties", s.protect(http.HandlerFunc(s.listProperties)))
 	m.Handle("GET /v1/organizations/{org}/inspections", s.protect(http.HandlerFunc(s.listInspections)))
+	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/share", s.protect(http.HandlerFunc(s.shareInspection)))
+	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/shares", s.protect(http.HandlerFunc(s.listReportLinks)))
+	m.Handle("DELETE /v1/organizations/{org}/shares/{link}", s.protect(http.HandlerFunc(s.revokeReportLink)))
 	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}", s.protect(http.HandlerFunc(s.inspectionDetail)))
 	m.Handle("PATCH /v1/organizations/{org}/inspections/{inspection}", s.protect(http.HandlerFunc(s.updateInspection)))
 	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/items", s.protect(http.HandlerFunc(s.listItems)))
