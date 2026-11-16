@@ -38,9 +38,13 @@ func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	_, err = s.db.Exec(r.Context(), "INSERT INTO organization_members(organization_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(organization_id,user_id) DO NOTHING", r.PathValue("org"), id, in.Role)
+	tag, err := s.db.Exec(r.Context(), "INSERT INTO organization_members(organization_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(organization_id,user_id) DO NOTHING", r.PathValue("org"), id, in.Role)
 	if err != nil {
 		fail(w, 503, "unavailable")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		fail(w, 409, "user is already a member")
 		return
 	}
 	write(w, 201, map[string]string{"user_id": id, "role": in.Role})
