@@ -460,7 +460,7 @@ func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
 	write(w, 201, map[string]string{"id": id, "name": in.Name, "role": "owner", "kind": in.Kind, "country": in.Country})
 }
 func (s *Server) listOrganizations(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query(r.Context(), "SELECT o.id,o.name,m.role FROM organizations o JOIN organization_members m ON o.id=m.organization_id WHERE m.user_id=$1 ORDER BY o.created_at DESC LIMIT 100", who(r).UserID)
+	rows, err := s.db.Query(r.Context(), "SELECT o.id,o.name,m.role,o.kind,o.country FROM organizations o JOIN organization_members m ON o.id=m.organization_id WHERE m.user_id=$1 ORDER BY o.created_at DESC LIMIT 100", who(r).UserID)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -468,12 +468,12 @@ func (s *Server) listOrganizations(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	out := []map[string]string{}
 	for rows.Next() {
-		var id, name, role string
-		if rows.Scan(&id, &name, &role) != nil {
+		var id, name, role, kind, country string
+		if rows.Scan(&id, &name, &role, &kind, &country) != nil {
 			fail(w, 503, "unavailable")
 			return
 		}
-		out = append(out, map[string]string{"id": id, "name": name, "role": role})
+		out = append(out, map[string]string{"id": id, "name": name, "role": role,"kind":kind,"country":country})
 	}
 	if rows.Err() != nil {
 		fail(w, 503, "unavailable")
