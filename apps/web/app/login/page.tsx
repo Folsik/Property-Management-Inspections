@@ -1,6 +1,6 @@
 "use client";
 import {FormEvent,useState} from "react";
-import {useRouter,useSearchParams} from "next/navigation";
+import {useRouter} from "next/navigation";
 import {ArrowRight,Building2,CheckCircle2,ClipboardCheck,LockKeyhole,ShieldCheck,ChevronsUpDown,Search} from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
@@ -11,7 +11,6 @@ import {formatE164} from "@/lib/phone";
 
 export default function Login(){
  const router=useRouter();
- const params=useSearchParams();
  const [method,setMethod]=useState<"otp"|"pin">("otp");
  const [step,setStep]=useState<"phone"|"verify">("phone");
  const [countryISO,setCountryISO]=useState("US");
@@ -37,7 +36,7 @@ export default function Login(){
    const data=await res.json();
    if(!res.ok)throw Error(data.error||"Authentication failed");
    if(method==="otp"&&step==="phone"){setDevelopmentCode(typeof data.dev_code==="string"?data.dev_code:"");setStep("verify");return;}
-   const next=params.get("next");
+   const next=new URLSearchParams(window.location.search).get("next");
    router.replace(next&&/^\/onboarding\?invite=[0-9a-f]{64}$/.test(next)?next:"/onboarding");router.refresh();
   }catch(err){setError(err instanceof Error?err.message:"Could not sign in");}
   finally{setPending(false);}
