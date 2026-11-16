@@ -144,21 +144,37 @@ func (s *Server) issue(w http.ResponseWriter, user string) {
 	write(w, 200, map[string]any{"access_token": token, "token_type": "Bearer", "expires_at": exp})
 }
 func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
-	var in struct { Phone string `json:"phone"` }
-	if !decode(w, r, &in) { return }
+	var in struct {
+		Phone string `json:"phone"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
 	if !phonePattern.MatchString(in.Phone) {
 		fail(w, 400, "phone must be E.164")
 		return
 	}
 	var count int
 	err := s.db.QueryRow(r.Context(), "SELECT count(*) FROM otp_challenges WHERE phone=$1 AND created_at>now()-interval '15 minutes'", in.Phone).Scan(&count)
-	if err != nil { fail(w, 503, "unavailable"); return }
-	if count >= 3 { fail(w, 429, "rate limited"); return }
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if count >= 3 {
+		fail(w, 429, "rate limited")
+		return
+	}
 	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
-	if err != nil { fail(w, 500, "unavailable"); return }
+	if err != nil {
+		fail(w, 500, "unavailable")
+		return
+	}
 	code := fmt.Sprintf("%06d", n.Int64())
 	hash, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
-	if err != nil { fail(w, 500, "unavailable"); return }
+	if err != nil {
+		fail(w, 500, "unavailable")
+		return
+	}
 	twilio := twilioConfigFromEnv()
 	if !twilio.configured() && s.env != "development" {
 		fail(w, 503, "OTP provider not configured")
@@ -167,10 +183,16 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 	// Keep challenge insertion atomic with provider delivery: unsuccessful sends never
 	// produce a usable OTP record. Production responses never expose the secret code.
 	tx, err := s.db.Begin(r.Context())
-	if err != nil { fail(w, 503, "unavailable"); return }
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
 	defer tx.Rollback(r.Context())
 	_, err = tx.Exec(r.Context(), "INSERT INTO otp_challenges(phone,code_hash,expires_at) VALUES($1,$2,now()+interval '5 minutes')", in.Phone, string(hash))
-	if err != nil { fail(w, 503, "unavailable"); return }
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
 	if twilio.configured() {
 		if err := sendTwilioSMS(r.Context(), twilio, in.Phone, "Your Inspectly verification code is "+code+". It expires in 5 minutes."); err != nil {
 			s.logger.Error("OTP provider delivery failed", "error", err)
@@ -178,14 +200,17 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := tx.Commit(r.Context()); err != nil { fail(w, 503, "unavailable"); return }
+	if err := tx.Commit(r.Context()); err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
 	if !twilio.configured() {
 		// Only available when Go runs in development and the SMS provider is unset.
 		// Never display this secret through the browser BFF.
-		write(w, 202, map[string]string{"status":"local_demo_only","dev_code":code})
+		write(w, 202, map[string]string{"status": "local_demo_only", "dev_code": code})
 		return
 	}
-	write(w, 202, map[string]string{"status":"sent"})
+	write(w, 202, map[string]string{"status": "sent"})
 }
 func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 	var in struct {
