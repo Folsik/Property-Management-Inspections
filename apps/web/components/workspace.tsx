@@ -6,7 +6,7 @@ import {
  Check,CheckCircle2,ClipboardCheck,ClipboardList,FileText,
  Image as ImageIcon,LayoutDashboard,LogOut,Menu,
  Plus,Search,Settings,Shield,ShieldCheck,Upload,Users,X,AlertCircle,Loader2,
- MapPin,RefreshCw,House,Camera,ExternalLink,
+ MapPin,RefreshCw,House,Camera,ExternalLink,FolderOpen,
 } from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
@@ -16,18 +16,19 @@ import {Card} from "@/components/ui/card";
 import {Dialog,DialogContent,DialogDescription,DialogTitle} from "@/components/ui/dialog";
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from "@/components/ui/select";
 import {api,endpoints,get,patch,post} from "@/lib/api";
-import type {Inspection,InspectionItem,InspectionStatus,InspectionType,Job,Media,Member,Organization,Profile,Property,ItemStatus} from "@/lib/types";
+import type {Contact,Inspection,InspectionItem,InspectionStatus,InspectionType,Job,Media,Member,Organization,Profile,Property,ItemStatus} from "@/lib/types";
 import {statusNames,typeNames} from "@/lib/types";
 import {cn} from "@/lib/utils";
 
-type Section="overview"|"properties"|"inspections"|"team"|"reports"|"settings";
-type DialogKind="organization"|"property"|"inspection"|"item"|"member"|null;
+type Section="overview"|"properties"|"inspections"|"team"|"contacts"|"reports"|"settings";
+type DialogKind="organization"|"property"|"inspection"|"item"|"member"|"contact"|null;
 type LoadingMap={orgs:boolean;workspace:boolean;detail:boolean};
 const sections:{id:Section;label:string;icon:typeof LayoutDashboard}[]=[
  {id:"overview",label:"Overview",icon:LayoutDashboard},
  {id:"properties",label:"Properties",icon:Building2},
  {id:"inspections",label:"Inspections",icon:ClipboardCheck},
  {id:"team",label:"Team members",icon:Users},
+ {id:"contacts",label:"Contacts",icon:FolderOpen},
  {id:"reports",label:"Reports & AI",icon:FileText},
  {id:"settings",label:"Settings",icon:Settings},
 ];
@@ -68,6 +69,9 @@ export function Workspace(){
  const [properties,setProperties]=useState<Property[]>([]);
  const [inspections,setInspections]=useState<Inspection[]>([]);
  const [members,setMembers]=useState<Member[]>([]);
+ const [contacts,setContacts]=useState<Contact[]>([]);
+ const [contactCategory,setContactCategory]=useState<"owner"|"tenant"|"vendor"|"other">("tenant");
+ const [contactEmail,setContactEmail]=useState("");
  const [jobs,setJobs]=useState<Job[]>([]);
  const [selectedID,setSelectedID]=useState("");
  const [selected,setSelected]=useState<Inspection|null>(null);
@@ -126,6 +130,10 @@ export function Workspace(){
   setSelectedID("");setSelected(null);setItems([]);setMedia([]);
   void reloadWorkspace(orgID);
  },[orgID,reloadWorkspace]);
+ const loadContacts=useCallback(async(id:string)=>{
+  try{const result=await endpoints.contacts(id);setContacts(result.items);}catch(e){showError(e);}
+ },[]);
+ useEffect(()=>{if(section==="contacts"&&orgID&&canManage)void loadContacts(orgID);},[section,orgID,canManage,loadContacts]);
  const reloadDetail=useCallback(async(id:string,inspection:string)=>{
   setLoading(old=>({...old,detail:true}));setError("");
   try{
@@ -135,7 +143,7 @@ export function Workspace(){
  },[]);
  useEffect(()=>{if(orgID&&selectedID)void reloadDetail(orgID,selectedID);},[orgID,selectedID,reloadDetail]);
  const chooseSection=(value:Section)=>{setSection(value);setSelectedID("");setMobileMenu(false);setSearch("");setNotice("");setError("");};
- const openDialog=(value:DialogKind)=>{setDialog(value);setName("");setCity("");setStreet("");setNotes("");setPhone("");setPin("");setSeverity("normal");setRole("inspector");setPropertyID(properties[0]?.id||"");setInspectionType("turnover");setError("");};
+ const openDialog=(value:DialogKind)=>{setDialog(value);setName("");setCity("");setStreet("");setNotes("");setPhone("");setPin("");setSeverity("normal");setRole("inspector");setContactCategory("tenant");setContactEmail("");setPropertyID(properties[0]?.id||"");setInspectionType("turnover");setError("");};
  const refresh=async()=>{await reloadWorkspace(orgID);if(selectedID)await reloadDetail(orgID,selectedID);setNotice("Information refreshed.");};
  const completed=inspections.filter(v=>v.status==="completed").length;
  const outstanding=inspections.reduce((sum,v)=>sum+v.open_items,0);
@@ -153,6 +161,7 @@ export function Workspace(){
    if(dialog==="property")await post(`v1/organizations/${orgID}/properties`,{name:name.trim(),address:{city:city.trim(),street:street.trim()}});
    if(dialog==="inspection")await post(`v1/organizations/${orgID}/inspections`,{property_id:propertyID,type:inspectionType});
    if(dialog==="item")await post(`v1/organizations/${orgID}/inspections/${selectedID}/items`,{client_id:crypto.randomUUID(),title:name.trim(),notes:notes.trim(),severity});
+   if(dialog==="contact"){await post(`v1/organizations/${orgID}/contacts`,{name:name.trim(),category:contactCategory,email:contactEmail.trim(),phone:phone.trim(),notes:notes.trim(),property_id:propertyID||null});await loadContacts(orgID);}
    if(dialog==="member")await post(`v1/organizations/${orgID}/members`,{phone:phone.trim(),role});
    setDialog(null);setNotice("Saved successfully.");
    await reloadWorkspace(orgID);if(selectedID)await reloadDetail(orgID,selectedID);
@@ -231,7 +240,7 @@ export function Workspace(){
    </div>
    <nav className="mt-9 flex-1 space-y-1 px-3" aria-label="Main navigation">
     <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[.17em] text-slate-400">Management</p>
-    {sections.slice(0,5).map(({id,label,icon:Icon})=><button key={id} onClick={()=>chooseSection(id)} className={cn("flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-semibold transition-colors",section===id?"bg-blue-50 text-blue-700":"text-slate-500 hover:bg-slate-50 hover:text-slate-800")}><Icon className="size-[19px]"/>{label}{id==="inspections"&&inspections.length>0&&<span className="ml-auto rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">{inspections.length}</span>}</button>)}
+    {sections.slice(0,6).filter(entry=>entry.id!=="contacts"||canManage).map(({id,label,icon:Icon})=><button key={id} onClick={()=>chooseSection(id)} className={cn("flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-semibold transition-colors",section===id?"bg-blue-50 text-blue-700":"text-slate-500 hover:bg-slate-50 hover:text-slate-800")}><Icon className="size-[19px]"/>{label}{id==="inspections"&&inspections.length>0&&<span className="ml-auto rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">{inspections.length}</span>}</button>)}
     <p className="mb-3 mt-9 px-3 text-[10px] font-bold uppercase tracking-[.17em] text-slate-400">Account</p>
     <button onClick={()=>chooseSection("settings")} className={cn("flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-semibold",section==="settings"?"bg-blue-50 text-blue-700":"text-slate-500 hover:bg-slate-50")}><Settings className="size-[19px]"/>Settings</button>
    </nav>
@@ -293,6 +302,11 @@ export function Workspace(){
       <Card className="overflow-hidden">{loading.workspace?<Loader/>:members.length?<div className="divide-y divide-slate-100">{members.map(member=><div key={member.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-full bg-blue-50 font-bold text-blue-600">{(member.full_name||member.phone).slice(0,1).toUpperCase()}</span><div><p className="text-sm font-bold">{member.full_name||member.phone}</p><p className="mt-1 text-xs text-slate-500">{member.phone}</p></div></div><div className="flex items-center gap-4"><span className="hidden text-xs text-slate-400 sm:inline">Joined {humanDate(member.joined_at)}</span><Badge tone={member.role==="owner"?"blue":"slate"}>{member.role}</Badge></div></div>)}</div>:<Empty icon={Users} title="No members found" description="Organization membership will appear here once users join."/>}</Card>
       <p className="mt-4 text-xs text-slate-500">Members must register using their phone number before an owner or manager can add them. Owners can add managers and inspectors; managers can add inspectors.</p>
      </>}
+     {section==="contacts"&&<>
+      <SectionHeading eyebrow="CRM-lite" title="Contacts" description="Real owners, tenants and vendor records associated with your organization." action={canManage?<Button onClick={()=>openDialog("contact")}><Plus className="size-4"/>New contact</Button>:undefined}/>
+      <div className="mb-6 max-w-sm"><div className="relative"><Search className="absolute left-3 top-3.5 size-4 text-slate-400"/><Input className="pl-10" placeholder="Search contacts..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
+      <Card className="overflow-hidden">{contacts.filter(c=>(c.name+" "+c.phone+" "+c.email+" "+c.category).toLowerCase().includes(search.toLowerCase())).length?<div className="divide-y divide-slate-100">{contacts.filter(c=>(c.name+" "+c.phone+" "+c.email+" "+c.category).toLowerCase().includes(search.toLowerCase())).map(contact=><div key={contact.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-full bg-blue-50 font-bold text-blue-600">{contact.name.slice(0,1).toUpperCase()}</span><div><p className="text-sm font-bold">{contact.name}</p><p className="mt-1 text-xs text-slate-500">{[contact.email,contact.phone].filter(Boolean).join(" · ")||"No contact details"}</p>{contact.notes&&<p className="mt-1 text-xs text-slate-500">{contact.notes}</p>}</div></div><Badge tone="blue">{contact.category}</Badge></div>)}</div>:<Empty icon={Users} title="No contacts found" description="Add a real contact to associate owners, tenants or vendors with your properties." action={canManage?<Button onClick={()=>openDialog("contact")}><Plus className="size-4"/>New contact</Button>:undefined}/>}</Card>
+     </>}
      {section==="reports"&&<>
       <SectionHeading eyebrow="Operations" title="Reports & AI jobs" description="Monitor background processing. Results appear only when a configured worker completes a job."/>
       <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-5"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 size-5 text-blue-600"/><div><h3 className="text-sm font-bold text-blue-900">Report generation is not yet enabled</h3><p className="mt-1 text-sm leading-relaxed text-blue-700">The database job queue is ready, but the AI/transcription and PDF workers are not deployed. No reports are generated or shown as complete until processing is implemented.</p></div></div></div>
@@ -321,13 +335,14 @@ export function Workspace(){
   </Dialog>
   <Dialog open={dialog!==null} onOpenChange={open=>{if(!open){setDialog(null);setError("");}}}>
    <DialogContent>
-    <DialogTitle className="text-xl font-bold">{dialog==="organization"?"Create organization":dialog==="property"?"Add property":dialog==="inspection"?"New inspection":dialog==="member"?"Add team member":"Add punch-list item"}</DialogTitle>
-    <DialogDescription className="mt-2 text-sm text-slate-500">{dialog==="organization"?"Set up a private workspace for your team.":dialog==="property"?"Register a real property in your portfolio.":dialog==="inspection"?"Select a property and inspection type.":dialog==="member"?"The user must already have a registered account.":"Document a condition or task for this inspection."}</DialogDescription>
+    <DialogTitle className="text-xl font-bold">{dialog==="organization"?"Create organization":dialog==="property"?"Add property":dialog==="inspection"?"New inspection":dialog==="member"?"Add team member":dialog==="contact"?"Create contact":"Add punch-list item"}</DialogTitle>
+    <DialogDescription className="mt-2 text-sm text-slate-500">{dialog==="organization"?"Set up a private workspace for your team.":dialog==="property"?"Register a real property in your portfolio.":dialog==="inspection"?"Select a property and inspection type.":dialog==="member"?"The user must already have a registered account.":dialog==="contact"?"Save an actual contact for this organization.":"Document a condition or task for this inspection."}</DialogDescription>
     <form className="mt-6 space-y-4" onSubmit={submit}>
-     {["organization","property","item"].includes(dialog||"")&&<Field name={dialog==="organization"?"Organization name":dialog==="property"?"Property name":"Item title"}><Input autoFocus required maxLength={dialog==="item"?500:dialog==="property"?160:120} value={name} onChange={e=>setName(e.target.value)} placeholder={dialog==="organization"?"Your company name":dialog==="property"?"Property or unit name":"Describe the issue"}/></Field>}
+     {["organization","property","item","contact"].includes(dialog||"")&&<Field name={dialog==="organization"?"Organization name":dialog==="property"?"Property name":dialog==="contact"?"Contact name":"Item title"}><Input autoFocus required maxLength={dialog==="item"?500:dialog==="property"||dialog==="contact"?160:120} value={name} onChange={e=>setName(e.target.value)} placeholder={dialog==="organization"?"Your company name":dialog==="property"?"Property or unit name":dialog==="contact"?"Full name":"Describe the issue"}/></Field>}
      {dialog==="property"&&<><Field name="Street / address"><Input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Street and building"/></Field><Field name="City"><Input value={city} onChange={e=>setCity(e.target.value)} placeholder="City"/></Field></>}
      {dialog==="inspection"&&<><Field name="Property"><Select value={propertyID} onValueChange={setPropertyID}><SelectTrigger><SelectValue placeholder="Select a property"/></SelectTrigger><SelectContent>{properties.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></Field><Field name="Inspection type"><Select value={inspectionType} onValueChange={v=>setInspectionType(v as InspectionType)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{(Object.keys(typeNames) as InspectionType[]).map(t=><SelectItem key={t} value={t}>{typeNames[t]}</SelectItem>)}</SelectContent></Select></Field></>}
      {dialog==="item"&&<><Field name="Notes"><Textarea value={notes} maxLength={10000} onChange={e=>setNotes(e.target.value)} placeholder="Additional details (optional)"/></Field><Field name="Severity"><Select value={severity} onValueChange={v=>setSeverity(v as typeof severity)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{["low","normal","high","critical"].map(t=><SelectItem key={t} value={t}>{t[0].toUpperCase()+t.slice(1)}</SelectItem>)}</SelectContent></Select></Field></>}
+     {dialog==="contact"&&<><Field name="Category"><Select value={contactCategory} onValueChange={v=>setContactCategory(v as typeof contactCategory)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{["owner","tenant","vendor","other"].map(v=><SelectItem key={v} value={v}>{v[0].toUpperCase()+v.slice(1)}</SelectItem>)}</SelectContent></Select></Field><Field name="Email"><Input type="email" value={contactEmail} onChange={e=>setContactEmail(e.target.value)} placeholder="email@example.com"/></Field><Field name="Phone (optional)"><Input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+44 7700 900123"/></Field><Field name="Property (optional)"><Select value={propertyID||"none"} onValueChange={v=>setPropertyID(v==="none"?"":v)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="none">No property</SelectItem>{properties.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></Field><Field name="Notes"><Textarea maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)}/></Field></>}
      {dialog==="member"&&<><Field name="Registered phone number"><Input type="tel" required pattern="\+[1-9][0-9]{7,14}" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+44 7700 900123"/></Field><Field name="Role"><Select value={role} onValueChange={v=>setRole(v as typeof role)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="inspector">Inspector</SelectItem>{activeOrg?.role==="owner"&&<SelectItem value="manager">Manager</SelectItem>}</SelectContent></Select></Field></>}
      {error&&<p role="alert" className="text-sm text-red-600">{error}</p>}
      <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={()=>{setDialog(null);setError("");}}>Cancel</Button><Button type="submit" disabled={saving||(dialog==="inspection"&&!propertyID)}>{saving?"Saving…":"Create"}<ArrowRight className="size-4"/></Button></div>

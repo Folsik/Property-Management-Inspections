@@ -1,4 +1,4 @@
-import type {Collection,Inspection,InspectionItem,Job,Media,Member,Organization,Profile,Property} from "@/lib/types";
+import type {Collection,Contact,Inspection,InspectionItem,Job,Media,Member,Organization,Profile,Property} from "@/lib/types";
 export class ApiError extends Error{constructor(public status:number,message:string){super(message);this.name="ApiError";}}
 export async function api<T>(path:string,init:RequestInit={}):Promise<T>{
  const response=await fetch("/api/backend/"+path.replace(/^\/+/, ""),{
@@ -20,6 +20,7 @@ export const endpoints={
  inspections:(org:string)=>get<Collection<Inspection>>(`v1/organizations/${org}/inspections`),
  inspection:(org:string,id:string)=>get<Inspection>(`v1/organizations/${org}/inspections/${id}`),
  items:(org:string,id:string)=>get<Collection<InspectionItem>>(`v1/organizations/${org}/inspections/${id}/items`),
+ contacts:(org:string)=>get<Collection<Contact>>(`v1/organizations/${org}/contacts`),
  members:(org:string)=>get<Collection<Member>>(`v1/organizations/${org}/members`),
  media:(org:string,id:string)=>get<Collection<Media>>(`v1/organizations/${org}/inspections/${id}/media`),
  jobs:(org:string)=>get<Collection<Job>>(`v1/organizations/${org}/jobs`),

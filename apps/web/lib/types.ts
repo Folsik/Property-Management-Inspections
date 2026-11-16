@@ -13,3 +13,5 @@ export type Profile={id:string;phone:string;full_name:string};
 export type Collection<T>={items:T[]};
 export const typeNames:Record<InspectionType,string>={move_in:"Move-in",move_out:"Move-out",turnover:"Turnover",maintenance:"Maintenance"};
 export const statusNames:Record<InspectionStatus,string>={draft:"Draft",in_progress:"In progress",completed:"Completed",cancelled:"Cancelled"};
+
+export type Contact={id:string;name:string;category:"owner"|"tenant"|"vendor"|"other";email:string;phone:string;notes:string;property_id:string|null;created_at:string};

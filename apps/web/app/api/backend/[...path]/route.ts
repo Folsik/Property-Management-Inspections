@@ -7,7 +7,7 @@ const allowed=[
  /^v1\/me$/,
  /^v1\/organizations$/,
  /^v1\/organizations\/[0-9a-f-]{36}$/,
- /^v1\/organizations\/[0-9a-f-]{36}\/(properties|inspections|members|jobs)$/,
+ /^v1\/organizations\/[0-9a-f-]{36}\/(properties|inspections|members|jobs|contacts)$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/(share|shares)$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/shares\/[0-9a-f-]{36}$/,
