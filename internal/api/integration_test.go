@@ -141,7 +141,7 @@ func TestPostgresSmoke(t *testing.T) {
 	}
 	call("GET", "/v1/organizations/"+org+"/members", outsider, nil, 403)
 	createdContact := call("POST", "/v1/organizations/"+org+"/contacts", owner, map[string]any{
-		"name":"Tenant Contact","category":"tenant","phone":outsiderPhone,"property_id":property,
+		"name": "Tenant Contact", "category": "tenant", "phone": outsiderPhone, "property_id": property,
 	}, 201)
 	if createdContact["name"] != "Tenant Contact" {
 		t.Fatal("contact did not persist")
@@ -152,7 +152,7 @@ func TestPostgresSmoke(t *testing.T) {
 	}
 	call("GET", "/v1/organizations/"+org+"/contacts", inspector, nil, 403)
 	call("POST", "/v1/organizations/"+org+"/contacts", outsider, map[string]any{
-		"name":"Other","category":"tenant",
+		"name": "Other", "category": "tenant",
 	}, 403)
 	call("GET", "/v1/organizations/"+org+"/jobs", owner, nil, 200)
 	// A guest can read only an explicitly shared report; revocation invalidates it.
