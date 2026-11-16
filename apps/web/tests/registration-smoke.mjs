@@ -42,7 +42,7 @@ assert.equal(pin.status,200,JSON.stringify(pin.data));
 const email="owner-"+phone.slice(1)+"@example.test";
 const emailChallenge=await request("/api/backend/v1/email/request","POST",{email});
 assert.equal(emailChallenge.status,202,JSON.stringify(emailChallenge.data));
-assert.match(emailChallenge.data.dev_code,/^\\d{6}$/);
+assert.match(emailChallenge.data.dev_code,/^\d{6}$/);
 const verifyEmail=await request("/api/backend/v1/email/verify","POST",{email,code:emailChallenge.data.dev_code});
 assert.equal(verifyEmail.status,200,JSON.stringify(verifyEmail.data));
 const profileName=await request("/api/backend/v1/me","PATCH",{full_name:"CI Real Owner"});
