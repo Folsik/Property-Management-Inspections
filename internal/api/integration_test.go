@@ -37,7 +37,7 @@ func TestPostgresSmoke(t *testing.T) {
 		t.Fatalf("idempotent database migration: %v", err)
 	}
 	var versions int
-	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 3 {
+	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 4 {
 		t.Fatalf("migration versions: count=%d err=%v", versions, err)
 	}
 	tokens, err := auth.NewManager("integration-test", 15*time.Minute)
@@ -140,6 +140,20 @@ func TestPostgresSmoke(t *testing.T) {
 		t.Fatalf("expected owner and inspector: %#v", team)
 	}
 	call("GET", "/v1/organizations/"+org+"/members", outsider, nil, 403)
+	createdContact := call("POST", "/v1/organizations/"+org+"/contacts", owner, map[string]any{
+		"name":"Tenant Contact","category":"tenant","phone":outsiderPhone,"property_id":property,
+	}, 201)
+	if createdContact["name"] != "Tenant Contact" {
+		t.Fatal("contact did not persist")
+	}
+	contacts := call("GET", "/v1/organizations/"+org+"/contacts", owner, nil, 200)
+	if len(contacts["items"].([]any)) != 1 {
+		t.Fatalf("expected one real contact: %#v", contacts)
+	}
+	call("GET", "/v1/organizations/"+org+"/contacts", inspector, nil, 403)
+	call("POST", "/v1/organizations/"+org+"/contacts", outsider, map[string]any{
+		"name":"Other","category":"tenant",
+	}, 403)
 	call("GET", "/v1/organizations/"+org+"/jobs", owner, nil, 200)
 	// A guest can read only an explicitly shared report; revocation invalidates it.
 	link := call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/share", owner, map[string]any{}, 201)
