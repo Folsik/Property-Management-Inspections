@@ -2,21 +2,21 @@
 
 import {FormEvent,useCallback,useEffect,useMemo,useState} from "react";
 import {
- Activity,ArrowDownRight,ArrowRight,ArrowUpRight,BarChart3,Building2,Calendar,
- Check,CheckCircle2,ChevronDown,ClipboardCheck,ClipboardList,Clock,FileText,
- FolderOpen,Image as ImageIcon,LayoutDashboard,LogOut,Menu,MoreHorizontal,
+ ArrowDownRight,ArrowRight,ArrowUpRight,Building2,
+ Check,CheckCircle2,ClipboardCheck,ClipboardList,FileText,
+ Image as ImageIcon,LayoutDashboard,LogOut,Menu,
  Plus,Search,Settings,Shield,ShieldCheck,Upload,Users,X,AlertCircle,Loader2,
- MapPin,RefreshCw,House,Camera,ExternalLink
+ MapPin,RefreshCw,House,Camera,
 } from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
 import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
-import {Card,CardContent,CardHeader,CardTitle} from "@/components/ui/card";
+import {Card} from "@/components/ui/card";
 import {Dialog,DialogContent,DialogDescription,DialogTitle} from "@/components/ui/dialog";
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from "@/components/ui/select";
-import {endpoints,get,patch,post,ApiError} from "@/lib/api";
-import type {Inspection,InspectionItem,InspectionStatus,InspectionType,Job,Media,Member,Organization,Profile,Property,Role,ItemStatus} from "@/lib/types";
+import {endpoints,patch,post} from "@/lib/api";
+import type {Inspection,InspectionItem,InspectionStatus,InspectionType,Job,Media,Member,Organization,Profile,Property,ItemStatus} from "@/lib/types";
 import {statusNames,typeNames} from "@/lib/types";
 import {cn} from "@/lib/utils";
 
@@ -267,7 +267,7 @@ export function Workspace(){
      {section==="reports"&&<>
       <SectionHeading eyebrow="Operations" title="Reports & AI jobs" description="Monitor background processing. Results appear only when a configured worker completes a job."/>
       <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-5"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 size-5 text-blue-600"/><div><h3 className="text-sm font-bold text-blue-900">Report generation is not yet enabled</h3><p className="mt-1 text-sm leading-relaxed text-blue-700">The database job queue is ready, but the AI/transcription and PDF workers are not deployed. No reports are generated or shown as complete until processing is implemented.</p></div></div></div>
-      <Card className="overflow-hidden"><div className="border-b border-slate-100 px-6 py-5"><h2 className="text-base font-bold">Background jobs</h2><p className="mt-1 text-xs text-slate-400">Live records from the organization's job queue</p></div>{loading.workspace?<Loader/>:jobs.length?<div className="divide-y divide-slate-100">{jobs.map(job=><div key={job.id} className="flex items-center justify-between gap-3 px-6 py-4"><div><p className="text-sm font-bold capitalize">{prettyStatus(job.kind)}</p><p className="mt-1 text-xs text-slate-400">{humanDate(job.created_at)} · {job.attempts} attempts</p></div><Badge tone={statusTone(job.state)}>{prettyStatus(job.state)}</Badge></div>)}</div>:<Empty icon={FileText} title="No background jobs" description="Job activity will appear here when processing pipelines are enabled."/>}</Card>
+      <Card className="overflow-hidden"><div className="border-b border-slate-100 px-6 py-5"><h2 className="text-base font-bold">Background jobs</h2><p className="mt-1 text-xs text-slate-400">Live records from the organization&apos;s job queue</p></div>{loading.workspace?<Loader/>:jobs.length?<div className="divide-y divide-slate-100">{jobs.map(job=><div key={job.id} className="flex items-center justify-between gap-3 px-6 py-4"><div><p className="text-sm font-bold capitalize">{prettyStatus(job.kind)}</p><p className="mt-1 text-xs text-slate-400">{humanDate(job.created_at)} · {job.attempts} attempts</p></div><Badge tone={statusTone(job.state)}>{prettyStatus(job.state)}</Badge></div>)}</div>:<Empty icon={FileText} title="No background jobs" description="Job activity will appear here when processing pipelines are enabled."/>}</Card>
      </>}
      {section==="settings"&&<>
       <SectionHeading eyebrow="Preferences" title="Account settings" description="Your profile and account security."/>
