@@ -44,12 +44,18 @@ func (s *Server) Handler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /healthz", s.health)
 	m.HandleFunc("GET /v1/public/reports/{token}", s.publicReport)
+	m.HandleFunc("GET /v1/invitations/{token}", s.invitationPreview)
 	m.HandleFunc("POST /v1/auth/otp/request", s.requestOTP)
 	m.HandleFunc("POST /v1/auth/otp/verify", s.verifyOTP)
 	m.HandleFunc("POST /v1/auth/pin/login", s.pinLogin)
 	m.Handle("POST /v1/auth/pin", s.protect(http.HandlerFunc(s.setPIN)))
 	m.Handle("POST /v1/auth/logout", s.protect(http.HandlerFunc(s.logout)))
 	m.Handle("GET /v1/me", s.protect(http.HandlerFunc(s.me)))
+	m.Handle("GET /v1/onboarding", s.protect(http.HandlerFunc(s.onboardingStatus)))
+	m.Handle("POST /v1/onboarding/complete", s.protect(http.HandlerFunc(s.completeOnboarding)))
+	m.Handle("POST /v1/email/request", s.protect(http.HandlerFunc(s.requestEmailOTP)))
+	m.Handle("POST /v1/email/verify", s.protect(http.HandlerFunc(s.verifyEmailOTP)))
+	m.Handle("POST /v1/invitations/{token}/accept", s.protect(http.HandlerFunc(s.acceptInvitation)))
 	m.Handle("POST /v1/organizations", s.protect(http.HandlerFunc(s.createOrganization)))
 	m.Handle("GET /v1/organizations", s.protect(http.HandlerFunc(s.listOrganizations)))
 	m.Handle("GET /v1/organizations/{org}/members", s.protect(http.HandlerFunc(s.listMembers)))
@@ -58,6 +64,9 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("GET /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.listContacts)))
 	m.Handle("POST /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.createContact)))
 	m.Handle("POST /v1/organizations/{org}/members", s.protect(http.HandlerFunc(s.addMember)))
+	m.Handle("GET /v1/organizations/{org}/invitations", s.protect(http.HandlerFunc(s.listInvitations)))
+	m.Handle("POST /v1/organizations/{org}/invitations", s.protect(http.HandlerFunc(s.inviteMember)))
+	m.Handle("DELETE /v1/organizations/{org}/invitations/{invite}", s.protect(http.HandlerFunc(s.revokeInvitation)))
 	m.Handle("POST /v1/organizations/{org}/properties", s.protect(http.HandlerFunc(s.createProperty)))
 	m.Handle("GET /v1/organizations/{org}/properties", s.protect(http.HandlerFunc(s.listProperties)))
 	m.Handle("GET /v1/organizations/{org}/inspections", s.protect(http.HandlerFunc(s.listInspections)))
@@ -407,14 +416,24 @@ func (s *Server) role(r *http.Request, roles ...string) (string, bool) {
 }
 func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name string `json:"name"`
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`
+		Country string `json:"country"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
 	in.Name = strings.TrimSpace(in.Name)
-	if len(in.Name) < 1 || len(in.Name) > 120 {
-		fail(w, 400, "invalid name")
+	if in.Kind == "" {
+		in.Kind = "company"
+	}
+	if in.Country == "" {
+		in.Country = "GB"
+	}
+	in.Country = strings.ToUpper(in.Country)
+	if len(in.Name) < 1 || len(in.Name) > 120 || (in.Kind != "individual" && in.Kind != "company") ||
+		len(in.Country) != 2 || in.Country[0] < 'A' || in.Country[0] > 'Z' || in.Country[1] < 'A' || in.Country[1] > 'Z' {
+		fail(w, 400, "invalid organization details")
 		return
 	}
 	tx, err := s.db.Begin(r.Context())
@@ -424,7 +443,7 @@ func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 	var id string
-	err = tx.QueryRow(r.Context(), "INSERT INTO organizations(name,created_by) VALUES($1,$2) RETURNING id", in.Name, who(r).UserID).Scan(&id)
+	err = tx.QueryRow(r.Context(), "INSERT INTO organizations(name,created_by,kind,country) VALUES($1,$2,$3,$4) RETURNING id", in.Name, who(r).UserID, in.Kind, in.Country).Scan(&id)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -438,10 +457,10 @@ func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	write(w, 201, map[string]string{"id": id, "name": in.Name, "role": "owner"})
+	write(w, 201, map[string]string{"id": id, "name": in.Name, "role": "owner", "kind": in.Kind, "country": in.Country})
 }
 func (s *Server) listOrganizations(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query(r.Context(), "SELECT o.id,o.name,m.role FROM organizations o JOIN organization_members m ON o.id=m.organization_id WHERE m.user_id=$1 ORDER BY o.created_at DESC LIMIT 100", who(r).UserID)
+	rows, err := s.db.Query(r.Context(), "SELECT o.id,o.name,m.role,o.kind,o.country FROM organizations o JOIN organization_members m ON o.id=m.organization_id WHERE m.user_id=$1 ORDER BY o.created_at DESC LIMIT 100", who(r).UserID)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -449,12 +468,12 @@ func (s *Server) listOrganizations(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	out := []map[string]string{}
 	for rows.Next() {
-		var id, name, role string
-		if rows.Scan(&id, &name, &role) != nil {
+		var id, name, role, kind, country string
+		if rows.Scan(&id, &name, &role, &kind, &country) != nil {
 			fail(w, 503, "unavailable")
 			return
 		}
-		out = append(out, map[string]string{"id": id, "name": name, "role": role})
+		out = append(out, map[string]string{"id": id, "name": name, "role": role, "kind": kind, "country": country})
 	}
 	if rows.Err() != nil {
 		fail(w, 503, "unavailable")

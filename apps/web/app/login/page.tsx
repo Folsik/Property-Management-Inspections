@@ -36,7 +36,8 @@ export default function Login(){
    const data=await res.json();
    if(!res.ok)throw Error(data.error||"Authentication failed");
    if(method==="otp"&&step==="phone"){setDevelopmentCode(typeof data.dev_code==="string"?data.dev_code:"");setStep("verify");return;}
-   router.replace("/dashboard");router.refresh();
+   const next=new URLSearchParams(window.location.search).get("next");
+   router.replace(next&&/^\/onboarding\?invite=[0-9a-f]{64}$/.test(next)?next:"/onboarding");router.refresh();
   }catch(err){setError(err instanceof Error?err.message:"Could not sign in");}
   finally{setPending(false);}
  }

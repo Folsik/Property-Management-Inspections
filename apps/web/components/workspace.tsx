@@ -16,7 +16,7 @@ import {Card} from "@/components/ui/card";
 import {Dialog,DialogContent,DialogDescription,DialogTitle} from "@/components/ui/dialog";
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from "@/components/ui/select";
 import {api,endpoints,get,patch,post} from "@/lib/api";
-import type {Contact,Inspection,InspectionItem,InspectionStatus,InspectionType,Job,Media,Member,Organization,Profile,Property,ItemStatus} from "@/lib/types";
+import type {Contact,Inspection,InspectionItem,InspectionStatus,InspectionType,Job,Media,Member,Organization,Profile,Property,ItemStatus,Invitation} from "@/lib/types";
 import {statusNames,typeNames} from "@/lib/types";
 import {cn} from "@/lib/utils";
 
@@ -69,6 +69,9 @@ export function Workspace(){
  const [properties,setProperties]=useState<Property[]>([]);
  const [inspections,setInspections]=useState<Inspection[]>([]);
  const [members,setMembers]=useState<Member[]>([]);
+ const [invitations,setInvitations]=useState<Invitation[]>([]);
+ const [inviteEmail,setInviteEmail]=useState("");
+ const [invitationLink,setInvitationLink]=useState("");
  const [contacts,setContacts]=useState<Contact[]>([]);
  const [contactCategory,setContactCategory]=useState<"owner"|"tenant"|"vendor"|"other">("tenant");
  const [contactEmail,setContactEmail]=useState("");
@@ -134,6 +137,8 @@ export function Workspace(){
   try{const result=await endpoints.contacts(id);setContacts(result.items);}catch(e){showError(e);}
  },[]);
  useEffect(()=>{if(section==="contacts"&&orgID&&canManage)void loadContacts(orgID);},[section,orgID,canManage,loadContacts]);
+ const reloadInvitations=useCallback(async(id:string)=>{try{const data=await get<{items:Invitation[]}>(`v1/organizations/${id}/invitations`);setInvitations(data.items);}catch(e){showError(e);}},[]);
+ useEffect(()=>{if(section==="team"&&orgID&&canManage)void reloadInvitations(orgID);},[section,orgID,canManage,reloadInvitations]);
  const reloadDetail=useCallback(async(id:string,inspection:string)=>{
   setLoading(old=>({...old,detail:true}));setError("");
   try{
@@ -143,7 +148,7 @@ export function Workspace(){
  },[]);
  useEffect(()=>{if(orgID&&selectedID)void reloadDetail(orgID,selectedID);},[orgID,selectedID,reloadDetail]);
  const chooseSection=(value:Section)=>{setSection(value);setSelectedID("");setMobileMenu(false);setSearch("");setNotice("");setError("");};
- const openDialog=(value:DialogKind)=>{setDialog(value);setName("");setCity("");setStreet("");setNotes("");setPhone("");setPin("");setSeverity("normal");setRole("inspector");setContactCategory("tenant");setContactEmail("");setPropertyID(properties[0]?.id||"");setInspectionType("turnover");setError("");};
+ const openDialog=(value:DialogKind)=>{setDialog(value);setName("");setCity("");setStreet("");setNotes("");setPhone("");setPin("");setSeverity("normal");setRole("inspector");setInviteEmail("");setInvitationLink("");setContactCategory("tenant");setContactEmail("");setPropertyID(properties[0]?.id||"");setInspectionType("turnover");setError("");};
  const refresh=async()=>{await reloadWorkspace(orgID);if(selectedID)await reloadDetail(orgID,selectedID);setNotice("Information refreshed.");};
  const completed=inspections.filter(v=>v.status==="completed").length;
  const outstanding=inspections.reduce((sum,v)=>sum+v.open_items,0);
@@ -162,10 +167,32 @@ export function Workspace(){
    if(dialog==="inspection")await post(`v1/organizations/${orgID}/inspections`,{property_id:propertyID,type:inspectionType});
    if(dialog==="item")await post(`v1/organizations/${orgID}/inspections/${selectedID}/items`,{client_id:crypto.randomUUID(),title:name.trim(),notes:notes.trim(),severity});
    if(dialog==="contact"){await post(`v1/organizations/${orgID}/contacts`,{name:name.trim(),category:contactCategory,email:contactEmail.trim(),phone:phone.trim(),notes:notes.trim(),property_id:propertyID||null});await loadContacts(orgID);}
-   if(dialog==="member")await post(`v1/organizations/${orgID}/members`,{phone:phone.trim(),role});
+   if(dialog==="member"){
+    const invitation=await post<{token:string}>(`v1/organizations/${orgID}/invitations`,{email:inviteEmail.trim(),role});
+    setInvitationLink(window.location.origin+"/invite/"+invitation.token);
+    await reloadInvitations(orgID);
+    setNotice("Invitation created. Send the link to your teammate or use the configured email provider.");
+    return;
+   }
    setDialog(null);setNotice("Saved successfully.");
    await reloadWorkspace(orgID);if(selectedID)await reloadDetail(orgID,selectedID);
   }catch(e){showError(e);}finally{setSaving(false);}
+ }
+ async function resendInvitation(inv:Invitation){
+  setSaving(true);setError("");
+  try{
+   const created=await post<{token:string}>(`v1/organizations/${orgID}/invitations`,{email:inv.email,role:inv.role});
+   setInviteEmail(inv.email);setRole(inv.role);
+   setInvitationLink(window.location.origin+"/invite/"+created.token);
+   setDialog("member");
+   await reloadInvitations(orgID);
+   setNotice("New invitation issued. The previous link has been revoked.");
+  }catch(e){showError(e);}finally{setSaving(false);}
+ }
+ async function revokeInvitation(invitationID:string){
+  setSaving(true);setError("");
+  try{await api(`v1/organizations/${orgID}/invitations/${invitationID}`,{method:"DELETE"});await reloadInvitations(orgID);setNotice("Invitation revoked.");}
+  catch(e){showError(e);}finally{setSaving(false);}
  }
  async function loadLinks(inspectionID:string){
   setLinksLoading(true);setError("");
@@ -298,9 +325,12 @@ export function Workspace(){
       </>}
      </>}
      {section==="team"&&<>
-      <SectionHeading eyebrow="Collaboration" title="Team members" description="Manage who can access and inspect your organization's properties." action={canManage?<Button onClick={()=>openDialog("member")}><Plus className="size-4"/>Add member</Button>:undefined}/>
-      <Card className="overflow-hidden">{loading.workspace?<Loader/>:members.length?<div className="divide-y divide-slate-100">{members.map(member=><div key={member.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-full bg-blue-50 font-bold text-blue-600">{(member.full_name||member.phone).slice(0,1).toUpperCase()}</span><div><p className="text-sm font-bold">{member.full_name||member.phone}</p><p className="mt-1 text-xs text-slate-500">{member.phone}</p></div></div><div className="flex items-center gap-4"><span className="hidden text-xs text-slate-400 sm:inline">Joined {humanDate(member.joined_at)}</span><Badge tone={member.role==="owner"?"blue":"slate"}>{member.role}</Badge></div></div>)}</div>:<Empty icon={Users} title="No members found" description="Organization membership will appear here once users join."/>}</Card>
-      <p className="mt-4 text-xs text-slate-500">Members must register using their phone number before an owner or manager can add them. Owners can add managers and inspectors; managers can add inspectors.</p>
+      <SectionHeading eyebrow="Collaboration" title="Team members" description="Invite teammates by email and control access to your organization's workspace." action={canManage?<Button onClick={()=>openDialog("member")}><Plus className="size-4"/>Invite member</Button>:undefined}/>
+      <Card className="overflow-hidden">{loading.workspace?<Loader/>:members.length?<div className="divide-y divide-slate-100">{members.map(member=><div key={member.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-full bg-blue-50 font-bold text-blue-600">{(member.full_name||member.phone).slice(0,1).toUpperCase()}</span><div><p className="text-sm font-bold">{member.full_name||member.phone}</p><p className="mt-1 text-xs text-slate-500">{member.phone}</p></div></div><div className="flex items-center gap-4"><span className="hidden text-xs text-slate-400 sm:inline">Joined {humanDate(member.joined_at)}</span><Badge tone={member.role==="owner"?"blue":"slate"}>{member.role}</Badge></div></div>)}</div>:<Empty icon={Users} title="No team members yet" description="Invite a teammate to help with inspections."/>}</Card>
+      {canManage&&<><div className="mt-7 mb-3 flex items-center justify-between"><h3 className="text-lg font-bold text-slate-900">Team invitations</h3><span className="text-xs text-slate-500">Links expire after seven days</span></div>
+       <Card className="overflow-hidden">{invitations.length?<div className="divide-y divide-slate-100">{invitations.map(inv=><div key={inv.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"><div className="min-w-0"><p className="truncate text-sm font-semibold">{inv.email}</p><p className="mt-1 text-xs text-slate-500">Role: {inv.role} · Expires {humanDate(inv.expires_at)}</p></div><div className="flex items-center gap-3">{inv.accepted_at?<Badge tone="green">Accepted</Badge>:inv.revoked_at?<Badge tone="slate">Revoked</Badge>:new Date(inv.expires_at)<=new Date()?<Badge tone="red">Expired</Badge>:<><Badge tone="amber">Pending</Badge>{(activeOrg?.role==="owner"||inv.role!=="manager")&&<Button variant="outline" size="sm" disabled={saving} onClick={()=>void revokeInvitation(inv.id)}>Revoke</Button>}</>}{!inv.accepted_at&&(activeOrg?.role==="owner"||inv.role!=="manager")&&<Button variant="outline" size="sm" disabled={saving} onClick={()=>void resendInvitation(inv)}>Resend</Button>}</div></div>)}</div>:<Empty icon={Users} title="No invitations yet" description="Create an invitation to add your first teammate." action={<Button onClick={()=>openDialog("member")}>Invite member</Button>}/>}</Card>
+       <p className="mt-4 text-xs text-slate-500">Only verified recipients can accept an invitation. Invite links are shown once after creation; revoked or expired links cannot be reused.</p>
+      </>}
      </>}
      {section==="contacts"&&<>
       <SectionHeading eyebrow="CRM-lite" title="Contacts" description="Real owners, tenants and vendor records associated with your organization." action={canManage?<Button onClick={()=>openDialog("contact")}><Plus className="size-4"/>New contact</Button>:undefined}/>
@@ -336,16 +366,16 @@ export function Workspace(){
   <Dialog open={dialog!==null} onOpenChange={open=>{if(!open){setDialog(null);setError("");}}}>
    <DialogContent>
     <DialogTitle className="text-xl font-bold">{dialog==="organization"?"Create organization":dialog==="property"?"Add property":dialog==="inspection"?"New inspection":dialog==="member"?"Add team member":dialog==="contact"?"Create contact":"Add punch-list item"}</DialogTitle>
-    <DialogDescription className="mt-2 text-sm text-slate-500">{dialog==="organization"?"Set up a private workspace for your team.":dialog==="property"?"Register a real property in your portfolio.":dialog==="inspection"?"Select a property and inspection type.":dialog==="member"?"The user must already have a registered account.":dialog==="contact"?"Save an actual contact for this organization.":"Document a condition or task for this inspection."}</DialogDescription>
+    <DialogDescription className="mt-2 text-sm text-slate-500">{dialog==="organization"?"Set up a private workspace for your team.":dialog==="property"?"Register a real property in your portfolio.":dialog==="inspection"?"Select a property and inspection type.":dialog==="member"?"Send an invite link to a teammate. They can register after receiving it.":dialog==="contact"?"Save an actual contact for this organization.":"Document a condition or task for this inspection."}</DialogDescription>
     <form className="mt-6 space-y-4" onSubmit={submit}>
      {["organization","property","item","contact"].includes(dialog||"")&&<Field name={dialog==="organization"?"Organization name":dialog==="property"?"Property name":dialog==="contact"?"Contact name":"Item title"}><Input autoFocus required maxLength={dialog==="item"?500:dialog==="property"||dialog==="contact"?160:120} value={name} onChange={e=>setName(e.target.value)} placeholder={dialog==="organization"?"Your company name":dialog==="property"?"Property or unit name":dialog==="contact"?"Full name":"Describe the issue"}/></Field>}
      {dialog==="property"&&<><Field name="Street / address"><Input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Street and building"/></Field><Field name="City"><Input value={city} onChange={e=>setCity(e.target.value)} placeholder="City"/></Field></>}
      {dialog==="inspection"&&<><Field name="Property"><Select value={propertyID} onValueChange={setPropertyID}><SelectTrigger><SelectValue placeholder="Select a property"/></SelectTrigger><SelectContent>{properties.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></Field><Field name="Inspection type"><Select value={inspectionType} onValueChange={v=>setInspectionType(v as InspectionType)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{(Object.keys(typeNames) as InspectionType[]).map(t=><SelectItem key={t} value={t}>{typeNames[t]}</SelectItem>)}</SelectContent></Select></Field></>}
      {dialog==="item"&&<><Field name="Notes"><Textarea value={notes} maxLength={10000} onChange={e=>setNotes(e.target.value)} placeholder="Additional details (optional)"/></Field><Field name="Severity"><Select value={severity} onValueChange={v=>setSeverity(v as typeof severity)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{["low","normal","high","critical"].map(t=><SelectItem key={t} value={t}>{t[0].toUpperCase()+t.slice(1)}</SelectItem>)}</SelectContent></Select></Field></>}
      {dialog==="contact"&&<><Field name="Category"><Select value={contactCategory} onValueChange={v=>setContactCategory(v as typeof contactCategory)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{["owner","tenant","vendor","other"].map(v=><SelectItem key={v} value={v}>{v[0].toUpperCase()+v.slice(1)}</SelectItem>)}</SelectContent></Select></Field><Field name="Email"><Input type="email" value={contactEmail} onChange={e=>setContactEmail(e.target.value)} placeholder="email@example.com"/></Field><Field name="Phone (optional)"><Input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+44 7700 900123"/></Field><Field name="Property (optional)"><Select value={propertyID||"none"} onValueChange={v=>setPropertyID(v==="none"?"":v)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="none">No property</SelectItem>{properties.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></Field><Field name="Notes"><Textarea maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)}/></Field></>}
-     {dialog==="member"&&<><Field name="Registered phone number"><Input type="tel" required pattern="\+[1-9][0-9]{7,14}" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+44 7700 900123"/></Field><Field name="Role"><Select value={role} onValueChange={v=>setRole(v as typeof role)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="inspector">Inspector</SelectItem>{activeOrg?.role==="owner"&&<SelectItem value="manager">Manager</SelectItem>}</SelectContent></Select></Field></>}
+     {dialog==="member"&&<><Field name="Teammate email"><Input type="email" autoComplete="email" required maxLength={254} value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="colleague@example.com" disabled={!!invitationLink}/></Field><Field name="Role"><Select value={role} onValueChange={v=>setRole(v as typeof role)} disabled={!!invitationLink}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="inspector">Inspector</SelectItem>{activeOrg?.role==="owner"&&<SelectItem value="manager">Manager</SelectItem>}</SelectContent></Select></Field>{invitationLink&&<div className="rounded-xl border border-blue-100 bg-blue-50 p-4"><p className="mb-2 text-sm font-semibold text-blue-800">Invite created</p><p className="break-all text-xs text-blue-700">{invitationLink}</p><Button type="button" variant="outline" className="mt-3 w-full" onClick={()=>{void navigator.clipboard.writeText(invitationLink);setNotice("Invitation link copied.");}}>Copy invitation link</Button><p className="mt-2 text-xs text-blue-600">Share this link securely; it is shown only once. The invited teammate must verify their email.</p></div>}</>}
      {error&&<p role="alert" className="text-sm text-red-600">{error}</p>}
-     <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={()=>{setDialog(null);setError("");}}>Cancel</Button><Button type="submit" disabled={saving||(dialog==="inspection"&&!propertyID)}>{saving?"Saving…":"Create"}<ArrowRight className="size-4"/></Button></div>
+     <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={()=>{setDialog(null);setError("");}}>Cancel</Button><Button type="submit" disabled={saving||!!invitationLink||(dialog==="inspection"&&!propertyID)}>{saving?"Saving…":dialog==="member"?"Send invitation":"Create"}<ArrowRight className="size-4"/></Button></div>
     </form>
    </DialogContent>
   </Dialog>

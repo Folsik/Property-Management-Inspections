@@ -9,7 +9,7 @@ AI-assisted property inspections and punch lists for property managers and short
 - **Media:** S3-compatible storage / Cloudflare R2 direct uploads (presigned requests).
 - **Clients:** Next.js 15 / Tailwind CSS 4 / shadcn-style web workspace implemented; SwiftUI iOS remains planned.
 - **Workers (planned):** transcription, structured extraction, PDF report generation using PostgreSQL SKIP LOCKED.
-- **Integrations (planned):** Whisper/LLM, Stripe, Resend/Twilio and guest report magic links.
+- **Integrations:** Twilio SMS and Resend transactional email (configure credentials), guest inspection report links; Whisper/LLM and Stripe remain planned.
 
 ## Quick start
 ```sh
@@ -48,3 +48,9 @@ For real SMS delivery set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FRO
 See [web documentation](apps/web/README.md) for architecture and operational requirements.
 
 **Not complete yet:** AI/PDF workers, media verification and retrieval, Stripe billing, offline iOS synchronization, session renewal and password/PIN recovery. This web foundation does not claim those integrations are finished.
+
+## Guided onboarding and team invitations
+
+New accounts follow OTP → PIN → verified email → individual/company organization → first property, then land in the real-data Dashboard. Invitees follow phone sign-in → PIN → verified email → accept invitation, without creating a duplicate organization. Existing accounts are grandfathered. See [onboarding documentation](apps/web/README.md).
+
+For production email verification and invitation delivery configure `RESEND_API_KEY`, `EMAIL_FROM`, `PUBLIC_WEB_URL` (HTTPS). Local Compose uses development OTP codes on loopback only.

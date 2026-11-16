@@ -1,5 +1,5 @@
 export type Role="owner"|"manager"|"inspector";
-export type Organization={id:string;name:string;role:Role};
+export type Organization={id:string;name:string;role:Role;kind?:"individual"|"company";country?:string};
 export type Property={id:string;name:string;address:Record<string,string>};
 export type InspectionType="move_in"|"move_out"|"turnover"|"maintenance";
 export type InspectionStatus="draft"|"in_progress"|"completed"|"cancelled";
@@ -10,6 +10,8 @@ export type Member={id:string;phone:string;full_name:string;role:Role;joined_at:
 export type Media={id:string;mime_type:string;size_bytes:number;state:string;created_at:string};
 export type Job={id:string;kind:string;state:string;attempts:number;created_at:string};
 export type Profile={id:string;phone:string;full_name:string};
+export type OnboardingStatus={phone:string;full_name:string;email:string|null;pin_set:boolean;email_verified:boolean;completed:boolean;has_organization:boolean;owns_organization:boolean;has_property:boolean};
+export type Invitation={id:string;email:string;role:"manager"|"inspector";created_at:string;expires_at:string;revoked_at:string|null;accepted_at:string|null};
 export type Collection<T>={items:T[]};
 export const typeNames:Record<InspectionType,string>={move_in:"Move-in",move_out:"Move-out",turnover:"Turnover",maintenance:"Maintenance"};
 export const statusNames:Record<InspectionStatus,string>={draft:"Draft",in_progress:"In progress",completed:"Completed",cancelled:"Cancelled"};
