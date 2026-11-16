@@ -110,6 +110,11 @@ func TestGuidedOnboardingAndInvitations(t *testing.T) {
 	}
 	call("GET", "/v1/organizations/"+org+"/invitations", owner, nil, 200)
 	call("GET", "/v1/invitations/"+inviteToken, "", nil, 200)
+	// Resending an invitation must revoke the previous bearer token.
+	renewed := call("POST", "/v1/organizations/"+org+"/invitations", owner, map[string]string{"email": workerEmail, "role": "inspector"}, 201)
+	call("GET", "/v1/invitations/"+inviteToken, "", nil, 404)
+	inviteToken = renewed["token"].(string)
+	call("GET", "/v1/invitations/"+inviteToken, "", nil, 200)
 	call("POST", "/v1/invitations/"+inviteToken+"/accept", worker, map[string]string{}, 403)
 	emailCode := call("POST", "/v1/email/request", worker, map[string]string{"email": workerEmail}, 202)["dev_code"].(string)
 	call("POST", "/v1/email/verify", worker, map[string]string{"email": workerEmail, "code": emailCode}, 200)
