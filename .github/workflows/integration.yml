@@ -1,0 +1,33 @@
+name: PostgreSQL integration
+on:
+  push:
+    branches: [main, feat/bootstrap-foundation]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: inspections_test
+          POSTGRES_USER: inspections
+          POSTGRES_PASSWORD: integration_only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U inspections -d inspections_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      RUN_DB_INTEGRATION: "1"
+      DATABASE_URL: postgres://inspections:integration_only@localhost:5432/inspections_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - run: go test ./internal/api -run TestPostgresSmoke -count=1 -v
