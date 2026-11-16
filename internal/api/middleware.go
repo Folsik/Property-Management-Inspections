@@ -1,5 +1,42 @@
 package api
-import ("crypto/rand";"encoding/hex";"log/slog";"net/http";"runtime/debug")
-func requestID(next http.Handler)http.Handler{return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){b:=make([]byte,12);if _,err:=rand.Read(b);err==nil{w.Header().Set("X-Request-ID",hex.EncodeToString(b))};next.ServeHTTP(w,r)})}
-func securityHeaders(next http.Handler)http.Handler{return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){h:=w.Header();h.Set("X-Content-Type-Options","nosniff");h.Set("X-Frame-Options","DENY");h.Set("Referrer-Policy","no-referrer");h.Set("Content-Security-Policy","default-src 'none'; frame-ancestors 'none'");next.ServeHTTP(w,r)})}
-func recoverer(logger *slog.Logger)func(http.Handler)http.Handler{return func(next http.Handler)http.Handler{return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){defer func(){if v:=recover();v!=nil{logger.Error("panic","panic",v,"stack",string(debug.Stack()));fail(w,500,"internal error")}}();next.ServeHTTP(w,r)})}}
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"log/slog"
+	"net/http"
+	"runtime/debug"
+)
+
+func requestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b := make([]byte, 12)
+		if _, err := rand.Read(b); err == nil {
+			w.Header().Set("X-Request-ID", hex.EncodeToString(b))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		next.ServeHTTP(w, r)
+	})
+}
+func recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if v := recover(); v != nil {
+					logger.Error("panic", "panic", v, "stack", string(debug.Stack()))
+					fail(w, 500, "internal error")
+				}
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
