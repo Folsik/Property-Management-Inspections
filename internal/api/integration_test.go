@@ -121,6 +121,32 @@ func TestPostgresSmoke(t *testing.T) {
 	call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/items", inspector, itemRequest, 201)
 	call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/items", outsider, itemRequest, 403)
 
+	// Read paths and status transitions used by the Next.js workspace.
+	inspections := call("GET", "/v1/organizations/"+org+"/inspections", owner, nil, 200)
+	if len(inspections["items"].([]any)) != 1 {
+		t.Fatalf("expected one live inspection: %#v", inspections)
+	}
+	call("GET", "/v1/organizations/"+org+"/inspections/"+inspection, owner, nil, 200)
+	call("GET", "/v1/organizations/"+org+"/inspections/"+inspection, outsider, nil, 403)
+	issues := call("GET", "/v1/organizations/"+org+"/inspections/"+inspection+"/items", inspector, nil, 200)
+	if len(issues["items"].([]any)) != 1 {
+		t.Fatalf("expected one live punch-list item: %#v", issues)
+	}
+	itemID := issues["items"].([]any)[0].(map[string]any)["id"].(string)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection+"/items/"+itemID, inspector, map[string]any{"status":"resolved"}, 200)
+	call("GET", "/v1/organizations/"+org+"/inspections/"+inspection+"/media", owner, nil, 200)
+	team := call("GET", "/v1/organizations/"+org+"/members", owner, nil, 200)
+	if len(team["items"].([]any)) != 2 {
+		t.Fatalf("expected owner and inspector: %#v", team)
+	}
+	call("GET", "/v1/organizations/"+org+"/members", outsider, nil, 403)
+	call("GET", "/v1/organizations/"+org+"/jobs", owner, nil, 200)
+	call("PATCH", "/v1/me", owner, map[string]any{"full_name":"Property Owner"}, 200)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection, inspector, map[string]any{"status":"in_progress"}, 200)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection, inspector, map[string]any{"status":"completed"}, 200)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection, inspector, map[string]any{"status":"draft"}, 400)
+	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection+"/items/"+itemID, inspector, map[string]any{"status":"open"}, 409)
+
 	call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/media/presign", inspector, map[string]any{"mime_type": "image/jpeg", "size_bytes": 2000}, 503)
 	loginToken := pinLogin["access_token"].(string)
 	call("POST", "/v1/auth/logout", loginToken, map[string]any{}, 200)

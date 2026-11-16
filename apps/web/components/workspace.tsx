@@ -91,6 +91,7 @@ export function Workspace(){
  const [phone,setPhone]=useState("");
  const [role,setRole]=useState<"manager"|"inspector">("inspector");
  const [pin,setPin]=useState("");
+ const [profileName,setProfileName]=useState("");
  const activeOrg=orgs.find(o=>o.id===orgID);
  const canManage=activeOrg?.role==="owner"||activeOrg?.role==="manager";
  const showError=(e:unknown)=>{setError(e instanceof Error?e.message:"Unable to complete this request");};
@@ -99,7 +100,7 @@ export function Workspace(){
   setLoading(old=>({...old,orgs:true}));setError("");
   try{
    const [orgData,user]=await Promise.all([endpoints.orgs(),endpoints.me()]);
-   setOrgs(orgData.items);setProfile(user);
+   setOrgs(orgData.items);setProfile(user);setProfileName(user.full_name);
    const previous=typeof window!=="undefined"?window.localStorage.getItem("inspectly_org"):"";
    setOrgID(current=>orgData.items.some(o=>o.id===current)?current:orgData.items.some(o=>o.id===previous)?previous||"":orgData.items[0]?.id||"");
   }catch(e){showError(e);}finally{setLoading(old=>({...old,orgs:false}));}
@@ -180,7 +181,7 @@ export function Workspace(){
  }
  async function saveProfile(event:FormEvent){
   event.preventDefault();setSaving(true);setError("");
-  try{await patch("v1/me",{full_name:name.trim()});setProfile(current=>current?{...current,full_name:name.trim()}:current);setNotice("Profile saved.");}
+  try{await patch("v1/me",{full_name:profileName.trim()});setProfile(current=>current?{...current,full_name:profileName.trim()}:current);setNotice("Profile saved.");}
   catch(e){showError(e);}finally{setSaving(false);}
  }
  async function savePin(event:FormEvent){
@@ -273,7 +274,7 @@ export function Workspace(){
      {section==="settings"&&<>
       <SectionHeading eyebrow="Preferences" title="Account settings" description="Your profile and account security."/>
       <div className="grid max-w-4xl gap-6 lg:grid-cols-2"><Card className="p-6"><div className="mb-5 flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Users className="size-5"/></div><div><h2 className="font-bold">Personal information</h2><p className="text-xs text-slate-400">Saved to your user profile</p></div></div>
-       <form onSubmit={saveProfile} className="space-y-4"><Field name="Phone number"><Input disabled value={profile?.phone||""} readOnly/></Field><Field name="Display name"><Input maxLength={120} placeholder="Your full name" value={name} onChange={e=>setName(e.target.value)} onFocus={()=>{if(!name&&profile?.full_name)setName(profile.full_name);}}/></Field><Button type="submit" disabled={saving}>Save profile</Button></form>
+       <form onSubmit={saveProfile} className="space-y-4"><Field name="Phone number"><Input disabled value={profile?.phone||""} readOnly/></Field><Field name="Display name"><Input maxLength={120} placeholder="Your full name" value={profileName} onChange={e=>setProfileName(e.target.value)}/></Field><Button type="submit" disabled={saving}>Save profile</Button></form>
       </Card><Card className="p-6"><div className="mb-5 flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Shield className="size-5"/></div><div><h2 className="font-bold">Security PIN</h2><p className="text-xs text-slate-400">Configure a six-digit sign-in PIN</p></div></div><form className="space-y-4" onSubmit={savePin}><Field name="New PIN"><Input type="password" required pattern="[0-9]{6}" maxLength={6} inputMode="numeric" value={pin} onChange={e=>setPin(e.target.value)} placeholder="••••••"/></Field><p className="text-xs text-slate-500">Sequential or identical digits are not allowed. For security, an existing PIN cannot be overwritten here.</p><Button type="submit" disabled={saving}>Create PIN</Button></form></Card>
       </div>
       <Card className="mt-6 max-w-4xl p-6"><h2 className="font-bold">Current organization</h2><p className="mt-1 text-sm text-slate-500">{activeOrg?.name} · Your role: <span className="capitalize">{activeOrg?.role}</span></p><p className="mt-3 text-xs text-slate-400">Organization access controls are enforced by the API for every request.</p></Card>

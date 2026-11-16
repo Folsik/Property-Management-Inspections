@@ -21,7 +21,7 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
  if(!result.ok)return NextResponse.json(data,{status:result.status});
  if(action==="request"){
   // Never expose dev-only OTP secrets to the browser; production provider required.
-  return NextResponse.json({status:"accepted"},{status:202});
+  return NextResponse.json({status:"accepted",...(process.env.NODE_ENV==="development"&&typeof data.dev_code==="string"?{dev_code:data.dev_code}:{})},{status:202});
  }
  const token=typeof data.access_token==="string"?data.access_token:"";
  const expiresAt=new Date(data.expires_at);

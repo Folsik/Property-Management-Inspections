@@ -14,6 +14,7 @@ export default function Login(){
  const [code,setCode]=useState("");
  const [pin,setPin]=useState("");
  const [error,setError]=useState("");
+ const [developmentCode,setDevelopmentCode]=useState("");
  const [pending,setPending]=useState(false);
  async function submit(event:FormEvent){
   event.preventDefault();setPending(true);setError("");
@@ -23,7 +24,7 @@ export default function Login(){
    const res=await fetch("/api/auth/"+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
    const data=await res.json();
    if(!res.ok)throw Error(data.error||"Authentication failed");
-   if(method==="otp"&&step==="phone"){setStep("verify");return;}
+   if(method==="otp"&&step==="phone"){setDevelopmentCode(typeof data.dev_code==="string"?data.dev_code:"");setStep("verify");return;}
    router.replace("/dashboard");router.refresh();
   }catch(err){setError(err instanceof Error?err.message:"Could not sign in");}
   finally{setPending(false);}
@@ -57,6 +58,7 @@ export default function Login(){
      </div>
      <form className="space-y-5" onSubmit={submit}>
       <div><label htmlFor="phone" className="mb-2 block text-sm font-semibold">Phone number</label><Input id="phone" type="tel" autoComplete="tel" placeholder="+44 7700 900123" value={phone} onChange={e=>setPhone(e.target.value)} required pattern="\+[1-9][0-9]{7,14}" disabled={step==="verify"}/><p className="mt-2 text-xs text-slate-400">Use international E.164 format.</p></div>
+      {developmentCode&&method==="otp"&&step==="verify"&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800"><strong>Local development OTP:</strong> {developmentCode}. Configure Twilio for real SMS delivery.</p>}
       {method==="otp"&&step==="verify"&&<div><label htmlFor="code" className="mb-2 block text-sm font-semibold">Verification code</label><Input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" placeholder="000000" value={code} onChange={e=>setCode(e.target.value)} required/></div>}
       {method==="pin"&&<div><label htmlFor="pin" className="mb-2 block text-sm font-semibold">6-digit PIN</label><Input id="pin" type="password" inputMode="numeric" autoComplete="current-password" maxLength={6} pattern="[0-9]{6}" placeholder="••••••" value={pin} onChange={e=>setPin(e.target.value)} required/></div>}
       {error&&<p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
