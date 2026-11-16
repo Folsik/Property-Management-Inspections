@@ -5,9 +5,9 @@ AI-assisted property inspections and punch lists for property managers and short
 ## Architecture
 - **Go 1.23 modular monolith:** `cmd/api`, `internal/{app,api,auth,config,store,media,jobs}`.
 - **PostgreSQL + pgx:** embedded, transactionally applied migrations and org-scoped data.
-- **Auth:** phone-first OTP, PIN, Ed25519 access JWT with revocation; roles are owner, manager and inspector.
+- **Auth:** phone-first OTP (Twilio SMS in production), PIN, Ed25519 access JWT with revocation; roles are owner, manager and inspector.
 - **Media:** S3-compatible storage / Cloudflare R2 direct uploads (presigned requests).
-- **Clients (planned):** offline-first SwiftUI iOS and Next.js web.
+- **Clients:** Next.js 15 / Tailwind CSS 4 / shadcn-style web workspace implemented; SwiftUI iOS remains planned.
 - **Workers (planned):** transcription, structured extraction, PDF report generation using PostgreSQL SKIP LOCKED.
 - **Integrations (planned):** Whisper/LLM, Stripe, Resend/Twilio and guest report magic links.
 
@@ -28,3 +28,23 @@ All tenant routes must verify membership for each organization. Client-generated
 
 ## License
 No license has been granted for this new repository.
+
+## Web workspace
+
+Start with `docker compose up --build`, then open **http://localhost:3000**.
+
+The Next.js client uses a same-origin BFF and server-side HTTP-only session cookie. No production user data is embedded in the frontend or seeded in the database. The UI provides:
+
+- Phone OTP and PIN login, logout, initial PIN creation and profile name settings
+- Tenant organization switcher, creation and membership management
+- Live portfolio dashboard, properties and search
+- Inspections, status transitions, punch-list creation and resolution
+- S3/R2 photo/audio direct upload tickets (remote browser PUT requires bucket CORS)
+- Printable inspection reports from real records; time-limited public guest report links with revocation
+- Background jobs list (AI transcription and PDF workers are **not yet deployed**)
+
+For real SMS delivery set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`; see [OTP integration](docs/otp-provider.md). Local Go development-only OTP is available through the API; no fabricated domain records are used.
+
+See [web documentation](apps/web/README.md) for architecture and operational requirements.
+
+**Not complete yet:** AI/PDF workers, media verification and retrieval, Stripe billing, offline iOS synchronization, session renewal and password/PIN recovery. This web foundation does not claim those integrations are finished.

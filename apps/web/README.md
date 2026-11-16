@@ -25,6 +25,7 @@ Visit http://localhost:3000 . The web container talks privately to Go on `http:/
 - Member listing and authorized member addition
 - S3/R2 signed direct media transfer (upload confirmation pipeline pending)
 - Background jobs listing (no fabricated AI/PDF reports)
+- Print-ready inspection reports and secure time-limited, revocable guest report links
 - User profile name update and first-time PIN setup
 
 ## Infrastructure dependencies
