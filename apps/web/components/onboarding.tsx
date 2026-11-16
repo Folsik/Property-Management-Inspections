@@ -44,7 +44,8 @@ export function Onboarding({token}:{token:string}){
  const [error,setError]=useState("");
  const [pin,setPin]=useState("");const [confirmPIN,setConfirmPIN]=useState("");
  const [email,setEmail]=useState("");const [emailCode,setEmailCode]=useState("");
- const [emailSent,setEmailSent]=useState(false);const [localCode,setLocalCode]=useState("");
+ const [emailSent,setEmailSent]=useState(false);
+ const [changeEmail,setChangeEmail]=useState(false);const [localCode,setLocalCode]=useState("");
  const [fullName,setFullName]=useState("");
  const [kind,setKind]=useState<"individual"|"company">("individual");
  const [orgName,setOrgName]=useState("");
@@ -83,7 +84,7 @@ export function Onboarding({token}:{token:string}){
   void initial();return()=>{active=false;};
  },[refresh,router,token]);
 
- const step=useMemo<Step>(()=>status?pickStep(status,!!token):"pin",[status,token]);
+ const step=useMemo<Step>(()=>status?(changeEmail&&status.pin_set?"email":pickStep(status,!!token)):"pin",[status,token,changeEmail]);
  const progress=step==="pin"?0:step==="email"?1:step==="organization"||step==="profile"||step==="invitation"?2:3;
  const execute=async(work:()=>Promise<void>)=>{
   setBusy(true);setError("");
@@ -106,7 +107,7 @@ export function Onboarding({token}:{token:string}){
  });};
  const verifyEmail=(event:FormEvent)=>{event.preventDefault();void execute(async()=>{
   await post("v1/email/verify",{email:email.trim(),code:emailCode.trim()});
-  setEmailSent(false);setLocalCode("");await refresh();
+  setEmailSent(false);setLocalCode("");setChangeEmail(false);await refresh();
  });};
  const saveProfile=(event:FormEvent)=>{event.preventDefault();void execute(async()=>{
   if(!fullName.trim())throw Error("Please enter your name.");
@@ -189,6 +190,7 @@ export function Onboarding({token}:{token:string}){
     {step==="invitation"&&<div className="space-y-5">
       {invite?<div className="rounded-2xl border border-blue-100 bg-blue-50 p-5"><p className="font-bold text-blue-950">{invite.organization_name}</p><p className="mt-2 text-sm text-blue-700">Invited as {invite.role}. Only the verified email address that received this invitation can accept.</p></div>:<p className="text-sm text-red-600">Invitation is invalid, expired or has already been accepted.</p>}
       <p className="text-xs text-slate-500">Signed in with {status?.email}. If this does not match the invited address, verify the correct email first.</p>
+      <button type="button" className="text-sm font-semibold text-blue-600 hover:underline" onClick={()=>{setChangeEmail(true);setEmailSent(false);setEmailCode("");setEmail("");setError("");}}>Verify a different email address</button>
       <Button className="w-full" disabled={busy||!invite} onClick={joinTeam}>{busy?"Joining…":"Accept invitation & continue"}<ArrowRight className="size-4"/></Button>
     </div>}
     {step==="finish"&&<div className="space-y-5"><div className="flex items-start gap-3 rounded-xl bg-green-50 p-4 text-sm text-green-800"><CheckCircle2 className="size-5 shrink-0"/>Your email, profile and workspace are configured.</div><Button className="w-full" disabled={busy} onClick={()=>void execute(complete)}>{busy?"Opening…":"Go to dashboard"}<ArrowRight className="size-4"/></Button></div>}
