@@ -91,7 +91,7 @@ func TestPostgresSmoke(t *testing.T) {
 		return token
 	}
 	// Unique numbers so reruns against the same test DB don't collide with OTP throttling.
-	var suffix int64 = time.Now().UnixNano()%100000000
+	var suffix int64 = time.Now().UnixNano() % 100000000
 	ownerPhone := fmt.Sprintf("+1555%08d", suffix)
 	inspectorPhone := fmt.Sprintf("+1666%08d", suffix)
 	outsiderPhone := fmt.Sprintf("+1777%08d", suffix)
