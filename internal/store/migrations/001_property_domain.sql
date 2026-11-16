@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  phone TEXT NOT NULL UNIQUE CHECK (phone ~ '^[+][1-9][0-9]{7,14}),
+  phone TEXT NOT NULL UNIQUE CHECK (phone ~ '^[+][1-9][0-9]{7,14}
   pin_hash TEXT,
   full_name TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
