@@ -1,7 +1,7 @@
 name: Next.js web
 on:
   push:
-    branches: [main, feat/nextjs-web-app]
+    branches: [main, feat/bootstrap-foundation]
   pull_request:
 permissions:
   contents: read

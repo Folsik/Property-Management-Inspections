@@ -1,0 +1,40 @@
+name: Docker Compose smoke
+on:
+  push:
+    branches: [main, feat/bootstrap-foundation]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Docker Compose definition
+        run: docker compose config --quiet
+      - name: Build all project services
+        run: docker compose build
+      - name: Start backend, database, and Next.js
+        run: docker compose up -d --no-build
+      - name: Verify API and frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8080/healthz >/dev/null &&
+               curl -fsS http://127.0.0.1:3000/login >/dev/null; then
+              echo "Go health and Next.js login served successfully"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs --tail=100
+          exit 1
+      - name: Print logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+      - name: Tear down services
+        if: always()
+        run: docker compose down --volumes
