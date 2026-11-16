@@ -37,7 +37,7 @@ func TestPostgresSmoke(t *testing.T) {
 		t.Fatalf("idempotent database migration: %v", err)
 	}
 	var versions int
-	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 2 {
+	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 3 {
 		t.Fatalf("migration versions: count=%d err=%v", versions, err)
 	}
 	tokens, err := auth.NewManager("integration-test", 15*time.Minute)
@@ -141,6 +141,17 @@ func TestPostgresSmoke(t *testing.T) {
 	}
 	call("GET", "/v1/organizations/"+org+"/members", outsider, nil, 403)
 	call("GET", "/v1/organizations/"+org+"/jobs", owner, nil, 200)
+	// A guest can read only an explicitly shared report; revocation invalidates it.
+	link := call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/share", owner, map[string]any{}, 201)
+	token := link["token"].(string)
+	report := call("GET", "/v1/public/reports/"+token, "", nil, 200)
+	if report["property_name"] != "Apartment A" {
+		t.Fatalf("guest report uses unexpected property: %#v", report)
+	}
+	call("GET", "/v1/organizations/"+org+"/inspections/"+inspection+"/shares", owner, nil, 200)
+	call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/share", outsider, map[string]any{}, 403)
+	call("DELETE", "/v1/organizations/"+org+"/shares/"+link["id"].(string), owner, nil, 200)
+	call("GET", "/v1/public/reports/"+token, "", nil, 404)
 	call("PATCH", "/v1/me", owner, map[string]any{"full_name": "Property Owner"}, 200)
 	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection, inspector, map[string]any{"status": "in_progress"}, 200)
 	call("PATCH", "/v1/organizations/"+org+"/inspections/"+inspection, inspector, map[string]any{"status": "completed"}, 200)

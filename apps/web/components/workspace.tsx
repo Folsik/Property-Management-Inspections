@@ -6,7 +6,7 @@ import {
  Check,CheckCircle2,ClipboardCheck,ClipboardList,FileText,
  Image as ImageIcon,LayoutDashboard,LogOut,Menu,
  Plus,Search,Settings,Shield,ShieldCheck,Upload,Users,X,AlertCircle,Loader2,
- MapPin,RefreshCw,House,Camera,
+ MapPin,RefreshCw,House,Camera,ExternalLink,
 } from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
@@ -154,6 +154,15 @@ export function Workspace(){
    await reloadWorkspace(orgID);if(selectedID)await reloadDetail(orgID,selectedID);
   }catch(e){showError(e);}finally{setSaving(false);}
  }
+ async function shareReport(inspectionID:string){
+  setSaving(true);setError("");
+  try{
+   const link=await post<{token:string;expires_at:string}>(`v1/organizations/${orgID}/inspections/${inspectionID}/share`,{});
+   const url=window.location.origin+"/share/"+link.token;
+   await navigator.clipboard.writeText(url);
+   setNotice("Public guest report link copied to clipboard. It expires in 7 days.");
+  }catch(e){showError(e);}finally{setSaving(false);}
+ }
  async function setInspectionStatus(status:InspectionStatus){
   if(!selected)return;setSaving(true);setError("");
   try{await patch(`v1/organizations/${orgID}/inspections/${selectedID}`,{status});await Promise.all([reloadDetail(orgID,selectedID),reloadWorkspace(orgID)]);setNotice("Inspection updated.");}
@@ -268,7 +277,7 @@ export function Workspace(){
      {section==="reports"&&<>
       <SectionHeading eyebrow="Operations" title="Reports & AI jobs" description="Monitor background processing. Results appear only when a configured worker completes a job."/>
       <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-5"><div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 size-5 text-blue-600"/><div><h3 className="text-sm font-bold text-blue-900">Report generation is not yet enabled</h3><p className="mt-1 text-sm leading-relaxed text-blue-700">The database job queue is ready, but the AI/transcription and PDF workers are not deployed. No reports are generated or shown as complete until processing is implemented.</p></div></div></div>
-      <Card className="mb-6 overflow-hidden"><div className="border-b border-slate-100 px-6 py-5"><h2 className="text-base font-bold">Print-ready inspection reports</h2><p className="mt-1 text-xs text-slate-400">Export actual inspection records through your browser’s Print / Save as PDF feature</p></div>{inspections.length?<div className="divide-y divide-slate-100">{inspections.map(report=><div key={report.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div><p className="text-sm font-bold">{report.property_name}</p><p className="mt-1 text-xs text-slate-400">{typeNames[report.type]} · {humanDate(report.created_at)} · {report.total_items} items</p></div><a target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50" href={`/report/${orgID}/${report.id}`}><FileText className="size-4"/>Open report</a></div>)}</div>:<Empty icon={FileText} title="No inspections to export" description="Create an inspection to generate a print-ready record from real data."/>}</Card>
+      <Card className="mb-6 overflow-hidden"><div className="border-b border-slate-100 px-6 py-5"><h2 className="text-base font-bold">Print-ready inspection reports</h2><p className="mt-1 text-xs text-slate-400">Export actual inspection records through your browser’s Print / Save as PDF feature</p></div>{inspections.length?<div className="divide-y divide-slate-100">{inspections.map(report=><div key={report.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"><div><p className="text-sm font-bold">{report.property_name}</p><p className="mt-1 text-xs text-slate-400">{typeNames[report.type]} · {humanDate(report.created_at)} · {report.total_items} items</p></div><div className="flex flex-wrap gap-2"><a target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50" href={`/report/${orgID}/${report.id}`}><FileText className="size-4"/>Open report</a>{canManage&&<Button variant="outline" size="sm" disabled={saving} onClick={()=>void shareReport(report.id)}><ExternalLink className="size-4"/>Share link</Button>}</div></div>)}</div>:<Empty icon={FileText} title="No inspections to export" description="Create an inspection to generate a print-ready record from real data."/>}</Card>
       <Card className="overflow-hidden"><div className="border-b border-slate-100 px-6 py-5"><h2 className="text-base font-bold">Background jobs</h2><p className="mt-1 text-xs text-slate-400">Live records from the organization&apos;s job queue</p></div>{loading.workspace?<Loader/>:jobs.length?<div className="divide-y divide-slate-100">{jobs.map(job=><div key={job.id} className="flex items-center justify-between gap-3 px-6 py-4"><div><p className="text-sm font-bold capitalize">{prettyStatus(job.kind)}</p><p className="mt-1 text-xs text-slate-400">{humanDate(job.created_at)} · {job.attempts} attempts</p></div><Badge tone={statusTone(job.state)}>{prettyStatus(job.state)}</Badge></div>)}</div>:<Empty icon={FileText} title="No background jobs" description="Job activity will appear here when processing pipelines are enabled."/>}</Card>
      </>}
      {section==="settings"&&<>
