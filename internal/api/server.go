@@ -4,6 +4,7 @@ import (
  "context"
  "crypto/rand"
  "encoding/json"
+ "io"
  "errors"
  "fmt"
  "log/slog"
@@ -38,6 +39,7 @@ func (s *Server) Handler()http.Handler {
  m.Handle("GET /v1/me",s.protect(http.HandlerFunc(s.me)))
  m.Handle("POST /v1/organizations",s.protect(http.HandlerFunc(s.createOrganization)))
  m.Handle("GET /v1/organizations",s.protect(http.HandlerFunc(s.listOrganizations)))
+ m.Handle("POST /v1/organizations/{org}/members",s.protect(http.HandlerFunc(s.addMember)))
  m.Handle("POST /v1/organizations/{org}/properties",s.protect(http.HandlerFunc(s.createProperty)))
  m.Handle("GET /v1/organizations/{org}/properties",s.protect(http.HandlerFunc(s.listProperties)))
  m.Handle("POST /v1/organizations/{org}/inspections",s.protect(http.HandlerFunc(s.createInspection)))
@@ -52,7 +54,7 @@ func decode(w http.ResponseWriter,r *http.Request,v any)bool{
  d:=json.NewDecoder(r.Body);d.DisallowUnknownFields()
  if err:=d.Decode(v);err!=nil{fail(w,400,"invalid JSON request");return false}
  var extra any
- if err:=d.Decode(&extra);!errors.Is(err,context.Canceled) && err==nil {fail(w,400,"multiple JSON values");return false}
+ if err:=d.Decode(&extra);!errors.Is(err,io.EOF){fail(w,400,"multiple JSON values or invalid trailing data");return false}
  return true
 }
 func bearer(r *http.Request)string{
@@ -121,8 +123,9 @@ func(s *Server) setPIN(w http.ResponseWriter,r *http.Request){
  if !decode(w,r,&in){return}
  if !pinOK(in.PIN){fail(w,400,"PIN must have 6 non-identical, non-sequential digits");return}
  h,err:=bcrypt.GenerateFromPassword([]byte(in.PIN),bcrypt.DefaultCost);if err!=nil{fail(w,500,"unavailable");return}
- _,err=s.db.Exec(r.Context(),"UPDATE users SET pin_hash=$2,failed_pin_attempts=0,pin_locked_until=NULL,updated_at=now() WHERE id=$1",who(r).UserID,string(h))
+ tag,err:=s.db.Exec(r.Context(),"UPDATE users SET pin_hash=$2,failed_pin_attempts=0,pin_locked_until=NULL,updated_at=now() WHERE id=$1 AND pin_hash IS NULL",who(r).UserID,string(h))
  if err!=nil{fail(w,503,"unavailable");return}
+ if tag.RowsAffected()==0{fail(w,409,"PIN already set; reauthentication required to change");return}
  write(w,200,map[string]string{"status":"pin_set"})
 }
 func pinOK(pin string)bool{
