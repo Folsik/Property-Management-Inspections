@@ -96,7 +96,7 @@ func (s *Server) completeOnboarding(w http.ResponseWriter,r *http.Request){
  u.pin_hash IS NOT NULL AND u.email_verified_at IS NOT NULL AND length(trim(u.full_name))>0
  AND EXISTS(SELECT 1 FROM organization_members m WHERE m.user_id=u.id AND (
  m.role<>'owner' OR EXISTS(SELECT 1 FROM properties p WHERE p.organization_id=m.organization_id)
- )))
+ ))
  ) FROM users u WHERE u.id=$1`,who(r).UserID).Scan(&allowed)
  if err!=nil{fail(w,503,"unavailable");return}
  if !allowed{fail(w,409,"complete your PIN, verified email, name, organization and first property");return}
