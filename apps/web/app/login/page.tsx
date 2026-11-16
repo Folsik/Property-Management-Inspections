@@ -1,23 +1,34 @@
 "use client";
 import {FormEvent,useState} from "react";
 import {useRouter} from "next/navigation";
-import {ArrowRight,Building2,CheckCircle2,ClipboardCheck,LockKeyhole,ShieldCheck} from "lucide-react";
+import {ArrowRight,Building2,CheckCircle2,ClipboardCheck,LockKeyhole,ShieldCheck,ChevronsUpDown,Search} from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Card} from "@/components/ui/card";
+import {Dialog,DialogContent,DialogTitle,DialogDescription} from "@/components/ui/dialog";
+import {COUNTRY_DIAL_CODES,countryFlag} from "@/lib/country-codes";
+import {formatE164} from "@/lib/phone";
 
 export default function Login(){
  const router=useRouter();
  const [method,setMethod]=useState<"otp"|"pin">("otp");
  const [step,setStep]=useState<"phone"|"verify">("phone");
- const [phone,setPhone]=useState("");
+ const [countryISO,setCountryISO]=useState("US");
+ const [nationalPhone,setNationalPhone]=useState("");
+ const [countryDialog,setCountryDialog]=useState(false);
+ const [countrySearch,setCountrySearch]=useState("");
+ const selectedCountry=COUNTRY_DIAL_CODES.find(country=>country.iso===countryISO)||COUNTRY_DIAL_CODES[0];
+ const phone=formatE164(selectedCountry.dial,nationalPhone);
+ const filteredCountries=COUNTRY_DIAL_CODES.filter(country=>(country.name+" "+country.iso+" "+country.dial).toLowerCase().includes(countrySearch.toLowerCase()));
  const [code,setCode]=useState("");
  const [pin,setPin]=useState("");
  const [error,setError]=useState("");
  const [developmentCode,setDevelopmentCode]=useState("");
  const [pending,setPending]=useState(false);
  async function submit(event:FormEvent){
-  event.preventDefault();setPending(true);setError("");
+  event.preventDefault();setError("");
+  if(!phone){setError("Enter a complete phone number after selecting the country code. +1 alone is not a valid number.");return;}
+  setPending(true);
   const path=method==="pin"?"pin-login":step==="phone"?"request":"verify";
   const body=method==="pin"?{phone,pin}:step==="phone"?{phone}:{phone,code};
   try{
@@ -57,7 +68,13 @@ export default function Login(){
       <button className={"rounded-lg p-2 text-sm font-semibold "+(method==="pin"?"bg-white text-blue-700 shadow-sm":"text-slate-500")} onClick={()=>{setMethod("pin");setStep("phone");setError("");}}>PIN</button>
      </div>
      <form className="space-y-5" onSubmit={submit}>
-      <div><label htmlFor="phone" className="mb-2 block text-sm font-semibold">Phone number</label><Input id="phone" type="tel" autoComplete="tel" placeholder="+44 7700 900123" value={phone} onChange={e=>setPhone(e.target.value)} required pattern="\+[1-9][0-9]{7,14}" disabled={step==="verify"}/><p className="mt-2 text-xs text-slate-400">Use international E.164 format.</p></div>
+      <div><label htmlFor="phone" className="mb-2 block text-sm font-semibold">Phone number</label>
+       <div className="flex gap-2">
+        <button type="button" aria-label="Choose country calling code" disabled={step==="verify"&&method==="otp"} onClick={()=>{setCountrySearch("");setCountryDialog(true);}} className="inline-flex h-11 min-w-[125px] items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:border-blue-400 disabled:opacity-60"><span>{countryFlag(selectedCountry.iso)}</span><span>{selectedCountry.dial}</span><ChevronsUpDown className="size-4 text-slate-400"/></button>
+        <Input id="phone" type="tel" autoComplete="tel-national" inputMode="tel" placeholder="National phone number" value={nationalPhone} onChange={e=>setNationalPhone(e.target.value)} required disabled={step==="verify"&&method==="otp"}/>
+       </div><p className="mt-2 text-xs text-slate-400">Select your country code, then enter the full phone number. Do not repeat the country code.</p>
+       {phone&&<p className="mt-1 text-xs text-blue-600">International format: {phone}</p>}
+      </div>
       {developmentCode&&method==="otp"&&step==="verify"&&<p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800"><strong>Local development OTP:</strong> {developmentCode}. Configure Twilio for real SMS delivery.</p>}
       {method==="otp"&&step==="verify"&&<div><label htmlFor="code" className="mb-2 block text-sm font-semibold">Verification code</label><Input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" placeholder="000000" value={code} onChange={e=>setCode(e.target.value)} required/></div>}
       {method==="pin"&&<div><label htmlFor="pin" className="mb-2 block text-sm font-semibold">6-digit PIN</label><Input id="pin" type="password" inputMode="numeric" autoComplete="current-password" maxLength={6} pattern="[0-9]{6}" placeholder="••••••" value={pin} onChange={e=>setPin(e.target.value)} required/></div>}
@@ -69,5 +86,16 @@ export default function Login(){
     <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400"><ShieldCheck className="size-4"/> Your session is stored in a secure, HTTP-only cookie.</div>
    </div>
   </div>
+  <Dialog open={countryDialog} onOpenChange={setCountryDialog}>
+   <DialogContent className="max-h-[85vh] overflow-hidden">
+    <DialogTitle className="text-lg font-bold">Select your country</DialogTitle>
+    <DialogDescription className="mt-1 text-sm text-slate-500">Choose the phone calling code for your region.</DialogDescription>
+    <div className="relative mt-4"><Search className="absolute left-3 top-3.5 size-4 text-slate-400"/><Input autoFocus className="pl-10" placeholder="Search country or code (+1, +44...)" value={countrySearch} onChange={e=>setCountrySearch(e.target.value)}/></div>
+    <div className="mt-3 max-h-[50vh] overflow-y-auto rounded-xl border border-slate-100" role="listbox" aria-label="Countries">
+     {filteredCountries.map(country=><button key={country.iso} type="button" role="option" aria-selected={country.iso===countryISO} onClick={()=>{setCountryISO(country.iso);setCountryDialog(false);setCountrySearch("");setError("");}} className="flex w-full items-center gap-3 border-b border-slate-50 px-3 py-3 text-left text-sm hover:bg-blue-50 focus-visible:bg-blue-50"><span className="text-xl">{countryFlag(country.iso)}</span><span className="min-w-0 flex-1 truncate">{country.name}</span><span className="shrink-0 font-semibold text-slate-500">{country.dial}</span></button>)}
+     {filteredCountries.length===0&&<p className="px-4 py-8 text-center text-sm text-slate-500">No countries match this search.</p>}
+    </div>
+   </DialogContent>
+  </Dialog>
  </div>;
 }
