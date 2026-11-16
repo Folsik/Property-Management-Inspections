@@ -65,7 +65,7 @@ func Run() error {
 		return fmt.Errorf("initialize token manager: %w", err)
 	}
 
-	handler := api.New(db.DB, tokens, logger).Handler()
+	handler := api.New(db.DB, tokens, logger, cfg.Env).Handler()
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second,
