@@ -416,18 +416,25 @@ func (s *Server) role(r *http.Request, roles ...string) (string, bool) {
 }
 func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name string `json:"name"`
-		Kind string `json:"kind"`
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`
 		Country string `json:"country"`
 	}
-	if !decode(w, r, &in) { return }
+	if !decode(w, r, &in) {
+		return
+	}
 	in.Name = strings.TrimSpace(in.Name)
-	if in.Kind=="" {in.Kind="company"}
-	if in.Country=="" {in.Country="GB"}
-	in.Country=strings.ToUpper(in.Country)
-	if len(in.Name)<1 || len(in.Name)>120 || (in.Kind!="individual"&&in.Kind!="company") ||
-		len(in.Country)!=2 || in.Country[0]<'A' || in.Country[0]>'Z' || in.Country[1]<'A' || in.Country[1]>'Z' {
-		fail(w,400,"invalid organization details");return
+	if in.Kind == "" {
+		in.Kind = "company"
+	}
+	if in.Country == "" {
+		in.Country = "GB"
+	}
+	in.Country = strings.ToUpper(in.Country)
+	if len(in.Name) < 1 || len(in.Name) > 120 || (in.Kind != "individual" && in.Kind != "company") ||
+		len(in.Country) != 2 || in.Country[0] < 'A' || in.Country[0] > 'Z' || in.Country[1] < 'A' || in.Country[1] > 'Z' {
+		fail(w, 400, "invalid organization details")
+		return
 	}
 	tx, err := s.db.Begin(r.Context())
 	if err != nil {
@@ -436,7 +443,7 @@ func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 	var id string
-	err = tx.QueryRow(r.Context(), "INSERT INTO organizations(name,created_by,kind,country) VALUES($1,$2,$3,$4) RETURNING id", in.Name, who(r).UserID,in.Kind,in.Country).Scan(&id)
+	err = tx.QueryRow(r.Context(), "INSERT INTO organizations(name,created_by,kind,country) VALUES($1,$2,$3,$4) RETURNING id", in.Name, who(r).UserID, in.Kind, in.Country).Scan(&id)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -450,7 +457,7 @@ func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	write(w, 201, map[string]string{"id": id, "name": in.Name, "role": "owner", "kind": in.Kind, "country":in.Country})
+	write(w, 201, map[string]string{"id": id, "name": in.Name, "role": "owner", "kind": in.Kind, "country": in.Country})
 }
 func (s *Server) listOrganizations(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(r.Context(), "SELECT o.id,o.name,m.role FROM organizations o JOIN organization_members m ON o.id=m.organization_id WHERE m.user_id=$1 ORDER BY o.created_at DESC LIMIT 100", who(r).UserID)
