@@ -43,3 +43,9 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+### Local authentication
+
+The root Docker Compose binds the web UI to `127.0.0.1:3000` and enables `WEB_LOCAL_OTP=true` with HTTP cookies for development only. When Twilio is not configured, the locally generated OTP is shown only on loopback requests to complete a real registration flow. **Do not use these environment overrides on public servers.**
+
+Production deployments must use HTTPS, secure cookies (omit `SESSION_COOKIE_SECURE=false`) and Twilio credentials; set `WEB_LOCAL_OTP=false` or omit it. The web app never fabricates domain data.

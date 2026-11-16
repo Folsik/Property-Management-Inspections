@@ -21,14 +21,14 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
  if(!result.ok)return NextResponse.json(data,{status:result.status});
  if(action==="request"){
   // Never expose dev-only OTP secrets to the browser; production provider required.
-  return NextResponse.json({status:"accepted",...(process.env.NODE_ENV==="development"&&typeof data.dev_code==="string"?{dev_code:data.dev_code}:{})},{status:202});
+  return NextResponse.json({status:"accepted",...((process.env.NODE_ENV==="development"||(process.env.WEB_LOCAL_OTP==="true"&&["localhost","127.0.0.1"].includes(req.nextUrl.hostname)))&&typeof data.dev_code==="string"?{dev_code:data.dev_code}:{})},{status:202});
  }
  const token=typeof data.access_token==="string"?data.access_token:"";
  const expiresAt=new Date(data.expires_at);
  if(!token||!Number.isFinite(expiresAt.getTime()))return NextResponse.json({error:"Invalid auth response"},{status:502});
  const response=NextResponse.json({ok:true});
  response.cookies.set("inspectly_session",token,{
-  httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",expires:expiresAt,
+  httpOnly:true,secure:process.env.NODE_ENV==="production"&&process.env.SESSION_COOKIE_SECURE!=="false",sameSite:"lax",path:"/",expires:expiresAt,
  });
  return response;
 }
