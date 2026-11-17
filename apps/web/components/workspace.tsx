@@ -281,8 +281,11 @@ export function Workspace(){
   }catch(e){showError(e);}finally{setSaving(false);}
  }
  async function signOut(){
-  await fetch("/api/auth/logout",{method:"POST"}).catch(()=>{});
-  window.location.assign("/login");
+  try{
+   const response=await fetch("/api/auth/logout",{method:"POST"});
+   if(!response.ok)throw Error("Could not revoke your session. Try again.");
+   window.location.assign("/login");
+  }catch(e){showError(e);}
  }
  return <div className="flex min-h-screen bg-[#f6f8fc]">
   {mobileMenu&&<button className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" aria-label="Close menu" onClick={()=>setMobileMenu(false)}/>}

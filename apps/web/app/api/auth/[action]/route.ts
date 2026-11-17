@@ -12,8 +12,28 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
  if(action==="logout"){
   const refresh=req.cookies.get("inspectly_refresh")?.value;
   const access=req.cookies.get("inspectly_session")?.value;
-  if(refresh)await fetchBackend("v1/auth/refresh/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({refresh_token:refresh})});
-  if(access)await fetchBackend("v1/auth/logout",{method:"POST",headers:{"Authorization":"Bearer "+access}});
+  // Resolve even a just-rotated refresh cookie via the BFF single-flight result.
+  // Failure to reach Go must not falsely claim that the device was signed out.
+  let fresh=null;
+  if(refresh){
+   const renewal=await renewSession(refresh);
+   if(renewal.status==="unavailable")return NextResponse.json({error:"Unable to revoke session right now"},{status:503});
+   if(renewal.status==="ok")fresh=renewal.pair;
+  }
+  if(fresh){
+   const revoked=await fetchBackend("v1/auth/refresh/logout",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({refresh_token:fresh.refresh_token})
+   });
+   if(!revoked.ok && revoked.status>=500){
+    return setAuthCookies(NextResponse.json({error:"Unable to revoke session right now"},{status:503}),fresh);
+   }
+  }else if(access){
+   const revoked=await fetchBackend("v1/auth/logout",{method:"POST",headers:{"Authorization":"Bearer "+access}});
+   if(!revoked.ok && revoked.status>=500){
+    return NextResponse.json({error:"Unable to revoke session right now"},{status:503});
+   }
+  }
   return clearAuthCookies(NextResponse.json({ok:true}));
  }
  if(action==="refresh"){
