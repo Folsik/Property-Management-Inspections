@@ -21,6 +21,7 @@ type Claims struct {
 	IssuedAt  int64  `json:"iat"`
 	ExpiresAt int64  `json:"exp"`
 	TokenID   string `json:"jti"`
+	AuthEpoch int64 `json:"ae"`
 }
 
 type Manager struct {
@@ -72,7 +73,8 @@ func newManager(issuer string, ttl time.Duration, private ed25519.PrivateKey) (*
 	return &Manager{private: privateCopy, public: public, issuer: issuer, ttl: ttl}, nil
 }
 
-func (m *Manager) Issue(subject string) (string, time.Time, error) {
+func (m *Manager) Issue(subject string) (string, time.Time, error) {return m.IssueWithEpoch(subject,0)}
+func (m *Manager) IssueWithEpoch(subject string,epoch int64) (string, time.Time, error) {
 	if strings.TrimSpace(subject) == "" {
 		return "", time.Time{}, errors.New("token subject must not be empty")
 	}
@@ -83,7 +85,7 @@ func (m *Manager) Issue(subject string) (string, time.Time, error) {
 		return "", time.Time{}, err
 	}
 	claims := Claims{
-		Subject: subject, Issuer: m.issuer, IssuedAt: now.Unix(),
+		Subject: subject, Issuer: m.issuer, IssuedAt: now.Unix(), AuthEpoch:epoch,
 		ExpiresAt: exp.Unix(), TokenID: base64.RawURLEncoding.EncodeToString(idBytes),
 	}
 	header, err := json.Marshal(map[string]string{"alg": "EdDSA", "typ": "JWT"})
