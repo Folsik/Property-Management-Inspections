@@ -19,7 +19,6 @@ var commonPasswords = map[string]bool{
  "iloveyou":true,"changeme":true,"123456789":true,"1234567890":true,
  "1234567890ab!":true,"aaaaaaaaaaaaa1!":true,
 }
-var repeatedPassword = regexp.MustCompile(`(?i)(.)\1{4,}`) // replaced below; Go RE2 does not support backrefs
 
 func validatePassword(value, phone, email string) error {
  if len(value)<12 || len(value)>72 || !utf8.ValidString(value) {return errors.New("Password must contain 12–72 UTF-8 bytes")}

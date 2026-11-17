@@ -29,7 +29,7 @@ function pickStep(state:OnboardingStatus,invitation:boolean):Step{
  return "finish";
 }
 const titles:Record<Step,[string,string]>={
- pin:["Create a secure PIN","Choose six digits you'll use to sign in next time."],
+ password:["Create your password","Use at least 12 characters and a unique strong password."],
  email:["Verify your email","We'll send a six-digit code to your inbox."],
  organization:["Tell us about your workspace","Create a home for your properties, inspections and people."],
  property:["Add your first property","Start with the basics. You can add photos and details later."],
@@ -91,7 +91,7 @@ export function Onboarding({token}:{token:string}){
   void initial();return()=>{active=false;};
  },[refresh,router,token]);
 
- const step=useMemo<Step>(()=>status?(changeEmail&&status.password_set?"email":pickStep(status,!!token)):"pin",[status,token,changeEmail]);
+ const step=useMemo<Step>(()=>status?(changeEmail&&status.password_set?"email":pickStep(status,!!token) ):"password",[status,token,changeEmail]);
  const progress=step==="password"?0:step==="email"?1:step==="organization"||step==="profile"||step==="invitation"?2:3;
  const execute=async(work:()=>Promise<void>)=>{
   setBusy(true);setError("");
@@ -103,10 +103,11 @@ export function Onboarding({token}:{token:string}){
   await post("v1/onboarding/complete",{});
   router.replace("/dashboard");router.refresh();
  };
- const savePIN=(event:FormEvent)=>{event.preventDefault();void execute(async()=>{
-  if(!/^\d{6}$/.test(pin)||pin!==confirmPIN)throw Error("PINs must match and contain six digits.");
-  await post("v1/auth/pin",{pin});
-  setPin("");setConfirmPIN("");await refresh();
+ const savePassword=(event:FormEvent)=>{event.preventDefault();void execute(async()=>{
+  if(password!==confirmPassword)throw Error("Passwords do not match.");
+  if(!passwordRules.every(rule=>rule.test(password)))throw Error("Password does not meet all security requirements.");
+  await post("v1/auth/password",{password});
+  setPassword("");setConfirmPassword("");await refresh();
  });};
  const requestEmail=(event:FormEvent)=>{event.preventDefault();void execute(async()=>{
   const result=await post<{dev_code?:string}>("v1/email/request",{email:email.trim()});
