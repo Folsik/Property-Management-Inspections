@@ -211,6 +211,21 @@ func TestMediaLifecycleAndTenantIsolation(t *testing.T) {
 	if read["download_url"] == nil {
 		t.Fatal("missing signed download")
 	}
+ // A presigned upload may remain valid for five minutes. Reuploading its
+ // staging key must never change a previously verified, downloadable object.
+ overwrite,err:=http.NewRequestWithContext(ctx,"PUT",uploadURL,bytes.NewReader([]byte("DANGER")))
+ if err!=nil{t.Fatal(err)}
+ overwrite.Header.Set("Content-Type","image/jpeg")
+ overwriteResult,err:=fake.Client().Do(overwrite)
+ if err!=nil{t.Fatal(err)}
+ overwriteResult.Body.Close()
+ immutable,err:=fake.Client().Get(read["download_url"].(string))
+ if err!=nil{t.Fatal(err)}
+ actual,_:=io.ReadAll(io.LimitReader(immutable.Body,100));immutable.Body.Close()
+ if !bytes.Equal(actual,[]byte{0xff,0xd8,0xff,0xe0,0,0}){
+  t.Fatalf("verified file changed after reused staging PUT: %x",actual)
+ }
+
 	request("GET", base+"/"+id+"/download", otherJWT, "", 403)
 	request("GET", "/v1/organizations/"+otherOrg+"/inspections/"+inspection+"/media/"+id+"/download", ownerJWT, "", 404)
 	request("DELETE", base+"/"+id, otherJWT, "", 403)
