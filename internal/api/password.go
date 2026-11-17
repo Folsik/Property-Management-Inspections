@@ -188,4 +188,4 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // bcrypt hash of a static unreachable random password, used to avoid a fast username-enumeration path.
-const dummyPasswordHash = "$2a$10$N9qo8uLOickgx2ZMRZoMye7YpEvWgjpMZ1JdNT6wF6C0W0.Ogm3bC"
+const dummyPasswordHash = "$2a$10$ROOskaGYq9NOqJpmrdi1bOWzuUadTBCj8Y.4.fJFBJKVnYZpGBkt."
