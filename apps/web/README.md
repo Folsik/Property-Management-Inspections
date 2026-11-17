@@ -68,7 +68,7 @@ Owner can invite managers and inspectors; manager can invite inspectors. The inv
 
 - **Sign up**: choose international calling code, verify phone by SMS, choose a strong password, verify email, create organization and add first property. Team members accept their organization invitation instead of creating a second property.
 - **Sign in**: enter the account's verified email **or complete international E.164 phone** together with the password.
-- Passwords must contain at least **12 characters** (maximum 72 UTF-8 bytes to avoid bcrypt truncation), one uppercase letter, one digit, and one special character; weak/common predictable sequences and personal identifiers are blocked server-side.
+- Passwords must contain at least **12 characters** (maximum 72 UTF-8 bytes to avoid bcrypt truncation), upper- and lowercase letters, one digit, and one special character; weak/common predictable sequences and personal identifiers are blocked server-side.
 - Passwords are stored as **bcrypt hashes**, never plaintext; five unsuccessful login attempts temporarily lock the account for 15 minutes. Current password is required when changing it in Settings.
 - Users enrolled under the previous six-digit PIN scheme can verify their existing phone using **Sign up**, then establish a password without deleting properties, organizations or teams.
 - Password-enrolled accounts cannot obtain a full session via the old phone OTP flow, and their legacy PIN cannot be used to sign in.
