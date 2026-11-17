@@ -135,7 +135,7 @@ func (s *Server) setPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tag, err := s.db.Exec(r.Context(), `UPDATE users SET password_hash=$2,failed_password_attempts=0,
- password_locked_until=NULL,auth_epoch=auth_epoch+1,updated_at=now() WHERE id=$1 AND password_hash IS NULL`, who(r).UserID, hash)
+ password_locked_until=NULL,updated_at=now() WHERE id=$1 AND password_hash IS NULL`, who(r).UserID, hash)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -190,7 +190,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = tx.Exec(r.Context(), `UPDATE users SET password_hash=$2,failed_password_attempts=0,
- password_locked_until=NULL,updated_at=now() WHERE id=$1`, who(r).UserID, nextHash)
+ password_locked_until=NULL,auth_epoch=auth_epoch+1,updated_at=now() WHERE id=$1`, who(r).UserID, nextHash)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
