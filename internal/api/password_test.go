@@ -19,7 +19,7 @@ func TestPasswordPolicy(t *testing.T) {
 			t.Errorf("passphrase %q rejected: %v", p, err)
 		}
 	}
-	bad := []string{"short phrase", "passwordpassword", "correct horse battery staple", "123456789012345", "qwertyqwertyqwerty", "person@example.test", strings.Repeat("a", 129)}
+	bad := []string{"short phrase", "passwordpassword", "correct horse battery staple", "123456789012345", "qwertyqwertyqwerty", "films+pic+galeries", "person@example.test", strings.Repeat("a", 129)}
 	for _, p := range bad {
 		if err := validatePassword(p, "+14155552671", "person@example.test"); err == nil {
 			t.Errorf("known/short password accepted: %q", p)
