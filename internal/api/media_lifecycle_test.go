@@ -244,18 +244,24 @@ func TestMediaLifecycleAndTenantIsolation(t *testing.T) {
 	if !bytes.Equal(actual, []byte{0xff, 0xd8, 0xff, 0xe0, 0, 0}) {
 		t.Fatalf("verified file changed after reused staging PUT: %x", actual)
 	}
- // Expiring the upload ticket enables cleanup of staging only, never the
- // verified immutable object already returned to authorized clients.
- _,err=database.DB.Exec(ctx,`UPDATE media_attachments SET created_at=now()-interval '2 hours' WHERE id=$1`,id)
- if err!=nil{t.Fatal(err)}
- if _,err=service.CleanupStaleMedia(ctx,50);err!=nil{t.Fatal(err)}
- stillAvailable,err:=fake.Client().Get(read["download_url"].(string))
- if err!=nil{t.Fatal(err)}
- retained,_:=io.ReadAll(io.LimitReader(stillAvailable.Body,100));stillAvailable.Body.Close()
- if !bytes.Equal(retained,[]byte{0xff,0xd8,0xff,0xe0,0,0}){
-  t.Fatalf("garbage collection removed verified media: %x",retained)
- }
-
+	// Expiring the upload ticket enables cleanup of staging only, never the
+	// verified immutable object already returned to authorized clients.
+	_, err = database.DB.Exec(ctx, `UPDATE media_attachments SET created_at=now()-interval '2 hours' WHERE id=$1`, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.CleanupStaleMedia(ctx, 50); err != nil {
+		t.Fatal(err)
+	}
+	stillAvailable, err := fake.Client().Get(read["download_url"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	retained, _ := io.ReadAll(io.LimitReader(stillAvailable.Body, 100))
+	stillAvailable.Body.Close()
+	if !bytes.Equal(retained, []byte{0xff, 0xd8, 0xff, 0xe0, 0, 0}) {
+		t.Fatalf("garbage collection removed verified media: %x", retained)
+	}
 
 	request("GET", base+"/"+id+"/download", otherJWT, "", 403)
 	request("GET", "/v1/organizations/"+otherOrg+"/inspections/"+inspection+"/media/"+id+"/download", ownerJWT, "", 404)
