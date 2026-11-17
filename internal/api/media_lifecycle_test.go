@@ -83,12 +83,18 @@ func TestMediaLifecycleAndTenantIsolation(t *testing.T) {
 		defer mu.Unlock()
 		switch r.Method {
 		case "PUT":
-            if source:=r.Header.Get("X-Amz-Copy-Source");source!=""{
-              from:=strings.TrimPrefix(source,"/media/")
-              existing,ok:=objects[from];if !ok{w.WriteHeader(404);return}
-              objects[key]=stored{append([]byte(nil),existing.body...),existing.mime}
-              w.WriteHeader(200);w.Write([]byte("<CopyObjectResult/>"));return
-            }
+			if source := r.Header.Get("X-Amz-Copy-Source"); source != "" {
+				from := strings.TrimPrefix(source, "/media/")
+				existing, ok := objects[from]
+				if !ok {
+					w.WriteHeader(404)
+					return
+				}
+				objects[key] = stored{append([]byte(nil), existing.body...), existing.mime}
+				w.WriteHeader(200)
+				w.Write([]byte("<CopyObjectResult/>"))
+				return
+			}
 			body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 			objects[key] = stored{body, r.Header.Get("Content-Type")}
 			w.WriteHeader(200)
