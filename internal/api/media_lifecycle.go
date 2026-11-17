@@ -3,8 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
- "crypto/rand"
- "encoding/hex"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -101,56 +101,77 @@ func presignObjectURL(endpoint, bucket, region, access, secret, key, method, mim
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
+
 // A CopyObject is server-authorized and moves verified bytes into a key for
 // which clients never receive a presigned PUT. This closes the time-of-check
 // versus time-of-use window from still-live staging upload tickets.
-func presignCopyURL(storage mediaStorage,source,target string,now time.Time)(string,error){
- if source==""||target==""||strings.ContainsAny(source,"\\?#")||strings.ContainsAny(target,"\\?#"){return "",errors.New("invalid storage copy key")}
- u,err:=url.Parse(storage.endpoint)
- if err!=nil||u.Scheme!="https"||u.Host==""||u.User!=nil||u.RawQuery!=""||u.Fragment!=""||u.Path!=""{return "",errors.New("invalid storage endpoint")}
- date:=now.UTC().Format("20060102")
- stamp:=now.UTC().Format("20060102T150405Z")
- scope:=date+"/"+storage.region+"/s3/aws4_request"
- u.Path="/"+storage.bucket+"/"+target
- sourceHeader:="/"+storage.bucket+"/"+source
- q:=url.Values{}
- q.Set("X-Amz-Algorithm","AWS4-HMAC-SHA256")
- q.Set("X-Amz-Credential",storage.access+"/"+scope)
- q.Set("X-Amz-Date",stamp)
- q.Set("X-Amz-Expires","60")
- q.Set("X-Amz-SignedHeaders","host;x-amz-copy-source")
- u.RawQuery=q.Encode()
- canonical:="PUT\n"+u.EscapedPath()+"\n"+u.RawQuery+"\nhost:"+u.Host+"\nx-amz-copy-source:"+sourceHeader+"\n\nhost;x-amz-copy-source\nUNSIGNED-PAYLOAD"
- signedText:="AWS4-HMAC-SHA256\n"+stamp+"\n"+scope+"\n"+hexHash(canonical)
- key:=hmacSHA([]byte("AWS4"+storage.secret),date)
- key=hmacSHA(key,storage.region);key=hmacSHA(key,"s3");key=hmacSHA(key,"aws4_request")
- q.Set("X-Amz-Signature",fmt.Sprintf("%x",hmacSHA(key,signedText)))
- u.RawQuery=q.Encode()
- return u.String(),nil
+func presignCopyURL(storage mediaStorage, source, target string, now time.Time) (string, error) {
+	if source == "" || target == "" || strings.ContainsAny(source, "\\?#") || strings.ContainsAny(target, "\\?#") {
+		return "", errors.New("invalid storage copy key")
+	}
+	u, err := url.Parse(storage.endpoint)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
+		return "", errors.New("invalid storage endpoint")
+	}
+	date := now.UTC().Format("20060102")
+	stamp := now.UTC().Format("20060102T150405Z")
+	scope := date + "/" + storage.region + "/s3/aws4_request"
+	u.Path = "/" + storage.bucket + "/" + target
+	sourceHeader := "/" + storage.bucket + "/" + source
+	q := url.Values{}
+	q.Set("X-Amz-Algorithm", "AWS4-HMAC-SHA256")
+	q.Set("X-Amz-Credential", storage.access+"/"+scope)
+	q.Set("X-Amz-Date", stamp)
+	q.Set("X-Amz-Expires", "60")
+	q.Set("X-Amz-SignedHeaders", "host;x-amz-copy-source")
+	u.RawQuery = q.Encode()
+	canonical := "PUT\n" + u.EscapedPath() + "\n" + u.RawQuery + "\nhost:" + u.Host + "\nx-amz-copy-source:" + sourceHeader + "\n\nhost;x-amz-copy-source\nUNSIGNED-PAYLOAD"
+	signedText := "AWS4-HMAC-SHA256\n" + stamp + "\n" + scope + "\n" + hexHash(canonical)
+	key := hmacSHA([]byte("AWS4"+storage.secret), date)
+	key = hmacSHA(key, storage.region)
+	key = hmacSHA(key, "s3")
+	key = hmacSHA(key, "aws4_request")
+	q.Set("X-Amz-Signature", fmt.Sprintf("%x", hmacSHA(key, signedText)))
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
-func (s *Server) storageCopy(ctx context.Context,storage mediaStorage,source,target string)error{
- link,err:=presignCopyURL(storage,source,target,time.Now())
- if err!=nil{return err}
- req,err:=http.NewRequestWithContext(ctx,"PUT",link,nil)
- if err!=nil{return err}
- req.Header.Set("X-Amz-Copy-Source","/"+storage.bucket+"/"+source)
- res,err:=s.storageHTTPClient.Do(req)
- if err!=nil{return err}
- defer res.Body.Close()
- data,err:=io.ReadAll(io.LimitReader(res.Body,65537))
- if err!=nil{return err}
- if len(data)>65536{return errors.New("oversized storage copy response")}
- if res.StatusCode!=200||bytes.Contains(bytes.ToLower(data),[]byte("<error>")){
-  return fmt.Errorf("storage copy failed: HTTP %d",res.StatusCode)
- }
- return nil
+func (s *Server) storageCopy(ctx context.Context, storage mediaStorage, source, target string) error {
+	link, err := presignCopyURL(storage, source, target, time.Now())
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, "PUT", link, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Amz-Copy-Source", "/"+storage.bucket+"/"+source)
+	res, err := s.storageHTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(res.Body, 65537))
+	if err != nil {
+		return err
+	}
+	if len(data) > 65536 {
+		return errors.New("oversized storage copy response")
+	}
+	if res.StatusCode != 200 || bytes.Contains(bytes.ToLower(data), []byte("<error>")) {
+		return fmt.Errorf("storage copy failed: HTTP %d", res.StatusCode)
+	}
+	return nil
 }
-func newVerifiedKey(stage string)(string,error){
- raw:=make([]byte,16)
- if _,err:=rand.Read(raw);err!=nil{return "",err}
- i:=strings.LastIndex(stage,"/")
- if i<0{return "",errors.New("invalid stage key")}
- return stage[:i]+"/verified/"+hex.EncodeToString(raw),nil
+func newVerifiedKey(stage string) (string, error) {
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	i := strings.LastIndex(stage, "/")
+	if i < 0 {
+		return "", errors.New("invalid stage key")
+	}
+	return stage[:i] + "/verified/" + hex.EncodeToString(raw), nil
 }
 func (s *Server) storageDo(ctx context.Context, storage mediaStorage, method, key string, rangeHeader string) (*http.Response, error) {
 	url, err := presignObjectURL(storage.endpoint, storage.bucket, storage.region, storage.access, storage.secret, key, method, "", time.Now(), 60)
@@ -278,18 +299,26 @@ func (s *Server) confirmMedia(w http.ResponseWriter, r *http.Request) {
 		fail(w, status, err.Error())
 		return
 	}
-	verifiedKey,copyErr:=newVerifiedKey(key)
- if copyErr!=nil{fail(w,503,"storage unavailable");return}
- if copyErr=s.storageCopy(r.Context(),storage,key,verifiedKey);copyErr!=nil{
-  fail(w,503,"storage copy failed");return
- }
- // Independently verify the copied object before granting read permission.
- if checked,verifyErr:=s.verifyStoredMedia(r.Context(),storage,verifiedKey,mime,size);verifyErr!=nil{
-  cleanup,deleteErr:=s.storageDo(r.Context(),storage,"DELETE",verifiedKey,"")
-  if deleteErr==nil{io.Copy(io.Discard,io.LimitReader(cleanup.Body,1024));cleanup.Body.Close()}
-  fail(w,checked,"verified copy unavailable");return
- }
-	_, err = tx.Exec(r.Context(), `UPDATE media_attachments SET object_key=$2,state='uploaded',verified_at=now(),verification_error=NULL WHERE id=$1`, id,verifiedKey)
+	verifiedKey, copyErr := newVerifiedKey(key)
+	if copyErr != nil {
+		fail(w, 503, "storage unavailable")
+		return
+	}
+	if copyErr = s.storageCopy(r.Context(), storage, key, verifiedKey); copyErr != nil {
+		fail(w, 503, "storage copy failed")
+		return
+	}
+	// Independently verify the copied object before granting read permission.
+	if checked, verifyErr := s.verifyStoredMedia(r.Context(), storage, verifiedKey, mime, size); verifyErr != nil {
+		cleanup, deleteErr := s.storageDo(r.Context(), storage, "DELETE", verifiedKey, "")
+		if deleteErr == nil {
+			io.Copy(io.Discard, io.LimitReader(cleanup.Body, 1024))
+			cleanup.Body.Close()
+		}
+		fail(w, checked, "verified copy unavailable")
+		return
+	}
+	_, err = tx.Exec(r.Context(), `UPDATE media_attachments SET object_key=$2,state='uploaded',verified_at=now(),verification_error=NULL WHERE id=$1`, id, verifiedKey)
 	if err != nil {
 		fail(w, 503, "database unavailable")
 		return
@@ -404,13 +433,13 @@ func (s *Server) CleanupStaleMedia(ctx context.Context, limit int) (int, error) 
 		if err != nil {
 			return cleaned, err
 		}
-		var id,key,state string
-        var staging *string
+		var id, key, state string
+		var staging *string
 		err = tx.QueryRow(ctx, `SELECT id,object_key,staging_key,state FROM media_attachments WHERE
   (state='pending' AND created_at<now()-interval '20 minutes')
   OR (state='rejected' AND deleted_at IS NULL)
   OR (staging_key IS NOT NULL AND created_at<now()-interval '20 minutes')
-  ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&id,&key,&staging,&state)
+  ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&id, &key, &staging, &state)
 		if errors.Is(err, pgx.ErrNoRows) {
 			tx.Rollback(ctx)
 			break
@@ -419,8 +448,10 @@ func (s *Server) CleanupStaleMedia(ctx context.Context, limit int) (int, error) 
 			tx.Rollback(ctx)
 			return cleaned, err
 		}
-		removeKey:=key
-        if staging!=nil{removeKey=*staging}
+		removeKey := key
+		if staging != nil {
+			removeKey = *staging
+		}
 		response, err := s.storageDo(ctx, storage, "DELETE", removeKey, "")
 		if err != nil {
 			tx.Rollback(ctx)
@@ -432,13 +463,13 @@ func (s *Server) CleanupStaleMedia(ctx context.Context, limit int) (int, error) 
 			tx.Rollback(ctx)
 			return cleaned, fmt.Errorf("storage cleanup DELETE returned %d", response.StatusCode)
 		}
-        if state=="uploaded"||state=="deleted" {
-         _,err=tx.Exec(ctx,`UPDATE media_attachments SET staging_key=NULL,staging_cleaned_at=now() WHERE id=$1`,id)
-        }else{
-		 _,err=tx.Exec(ctx,`UPDATE media_attachments SET state='rejected',rejected_at=COALESCE(rejected_at,now()),
+		if state == "uploaded" || state == "deleted" {
+			_, err = tx.Exec(ctx, `UPDATE media_attachments SET staging_key=NULL,staging_cleaned_at=now() WHERE id=$1`, id)
+		} else {
+			_, err = tx.Exec(ctx, `UPDATE media_attachments SET state='rejected',rejected_at=COALESCE(rejected_at,now()),
          verification_error=COALESCE(verification_error,'upload expired'),deleted_at=now(),
-         staging_key=NULL,staging_cleaned_at=now() WHERE id=$1`,id)
-        }
+         staging_key=NULL,staging_cleaned_at=now() WHERE id=$1`, id)
+		}
 		if err != nil {
 			tx.Rollback(ctx)
 			return cleaned, err
