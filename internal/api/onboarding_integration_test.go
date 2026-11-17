@@ -137,4 +137,10 @@ func TestGuidedOnboardingAndInvitations(t *testing.T) {
 	call("DELETE", "/v1/organizations/"+org+"/invitations/"+managerID, owner, nil, 200)
 	call("GET", "/v1/invitations/"+managerInvite["token"].(string), "", nil, 404)
 	call("GET", "/v1/organizations/"+org+"/invitations", worker, nil, 403)
+	// Five failed password attempts lock the account, including for a correct password.
+	for i := 0; i < 5; i++ {
+		call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "wrong-password"}, 401)
+	}
+	call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "Welcome!Rivers32Lake"}, 429)
 }
+
