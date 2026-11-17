@@ -31,3 +31,10 @@
 - [ ] Extend Docker Compose E2E smoke; verify error/expiration/replay paths.
 - [ ] Update documentation, remove temporary CI format workflow, run all CI checks.
 - [ ] PR merge to main and sync integration branch.
+
+## Implementation checkpoint
+- Migration 007 stores hashed, expiring recovery capabilities, and auth_epoch on users.
+- Go password API has Argon2id+NFC and bcrypt verification compatibility.
+- Separate dual-channel recovery endpoints and Next.js pages added.
+- Live Docker Compose test to verify reset and previous JWT revocation.
+- See CI on integration branch for validation before merge.
