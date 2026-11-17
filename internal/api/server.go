@@ -271,9 +271,15 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var user string
 	var enrolled bool
-	err=tx.QueryRow(r.Context(),`SELECT EXISTS(SELECT 1 FROM users WHERE phone=$1 AND password_hash IS NOT NULL)`,in.Phone).Scan(&enrolled)
-	if err!=nil{fail(w,503,"unavailable");return}
-	if enrolled{fail(w,409,"This account uses password sign-in");return}
+	err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE phone=$1 AND password_hash IS NOT NULL)`, in.Phone).Scan(&enrolled)
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if enrolled {
+		fail(w, 409, "This account uses password sign-in")
+		return
+	}
 	err = tx.QueryRow(r.Context(), "INSERT INTO users(phone) VALUES($1) ON CONFLICT(phone) DO UPDATE SET updated_at=users.updated_at RETURNING id", in.Phone).Scan(&user)
 	if err != nil {
 		fail(w, 503, "unavailable")
@@ -366,8 +372,14 @@ func (s *Server) pinLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var passwordSet bool
-	if err=tx.QueryRow(r.Context(),`SELECT password_hash IS NOT NULL FROM users WHERE id=$1`,id).Scan(&passwordSet);err!=nil{fail(w,503,"unavailable");return}
-	if passwordSet{fail(w,401,"use password sign-in");return}
+	if err = tx.QueryRow(r.Context(), `SELECT password_hash IS NOT NULL FROM users WHERE id=$1`, id).Scan(&passwordSet); err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if passwordSet {
+		fail(w, 401, "use password sign-in")
+		return
+	}
 	if hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.PIN)) != nil {
 		_, err = tx.Exec(r.Context(), "UPDATE users SET failed_pin_attempts=CASE WHEN failed_pin_attempts>=4 THEN 0 ELSE failed_pin_attempts+1 END,pin_locked_until=CASE WHEN failed_pin_attempts>=4 THEN now()+interval '15 minutes' ELSE NULL END WHERE id=$1", id)
 		if err != nil {
