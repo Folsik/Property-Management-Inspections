@@ -16,9 +16,9 @@ Visit http://localhost:3000 . The web container talks privately to Go on `http:/
 
 ## Screen coverage
 
-- Guided phone OTP → PIN → verified email → owner/company workspace → first property onboarding
-- Invited employee quick path (PIN, email verification, accept invitation) without creating a second workspace
-- Phone OTP sign-in, PIN sign-in, logout
+- Guided phone OTP → password → verified email → owner/company workspace → first property onboarding
+- Invited employee quick path (password, email verification, accept invitation) without creating a second workspace
+- Email/phone + password sign-in; SMS OTP sign-up, password change and logout
 - Organization creation and switcher
 - Portfolio overview with actual counts and activity
 - Property creation/list/search
@@ -28,7 +28,7 @@ Visit http://localhost:3000 . The web container talks privately to Go on `http:/
 - S3/R2 signed direct media transfer (upload confirmation pipeline pending)
 - Background jobs listing (no fabricated AI/PDF reports)
 - Print-ready inspection reports and secure time-limited, revocable guest report links
-- User profile name update and first-time PIN setup
+- User profile name update and password management
 
 ## Infrastructure dependencies
 
@@ -63,3 +63,15 @@ The organization types are `individual` (private property owner) and `company`, 
 ### Team access
 
 Owner can invite managers and inspectors; manager can invite inspectors. The invitee must authenticate with phone OTP/PIN and verify **exactly the recipient email** to accept. Invitation tokens are random, hashed in PostgreSQL, single-use, expiring after 7 days, and revocable. Links shown after creation cannot be recovered from the invitation list. All access remains organization scoped.
+
+## Password authentication (Nov 2026)
+
+- **Sign up**: choose international calling code, verify phone by SMS, choose a strong password, verify email, create organization and add first property. Team members accept their organization invitation instead of creating a second property.
+- **Sign in**: enter the account's verified email **or complete international E.164 phone** together with the password.
+- Passwords must contain at least **12 characters** (maximum 72 UTF-8 bytes to avoid bcrypt truncation), upper- and lowercase letters, one digit, and one special character; weak/common predictable sequences and personal identifiers are blocked server-side.
+- Passwords are stored as **bcrypt hashes**, never plaintext; five unsuccessful login attempts temporarily lock the account for 15 minutes. Current password is required when changing it in Settings.
+- Users enrolled under the previous six-digit PIN scheme can verify their existing phone using **Sign up**, then establish a password without deleting properties, organizations or teams.
+- Password-enrolled accounts cannot obtain a full session via the old phone OTP flow, and their legacy PIN cannot be used to sign in.
+- The legacy PIN API remains for compatibility while old users migrate, but is not exposed by the web UI and is disabled for password-enrolled accounts.
+- Password-reset / account recovery for users who lost their password is **not yet implemented**. Do not suggest re-registering a password-enrolled account as recovery. This will require a distinct identity-verification flow.
+- Security design note: NIST 800-63B-4 recommends **15-character minimum and blocklists, without character-class composition requirements**. This product currently enforces the user-requested uppercase/digit/symbol rules; consider revisiting after usability and security review.

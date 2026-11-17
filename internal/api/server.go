@@ -48,6 +48,9 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /v1/auth/otp/request", s.requestOTP)
 	m.HandleFunc("POST /v1/auth/otp/verify", s.verifyOTP)
 	m.HandleFunc("POST /v1/auth/pin/login", s.pinLogin)
+	m.HandleFunc("POST /v1/auth/password/login", s.passwordLogin)
+	m.Handle("POST /v1/auth/password", s.protect(http.HandlerFunc(s.setPassword)))
+	m.Handle("POST /v1/auth/password/change", s.protect(http.HandlerFunc(s.changePassword)))
 	m.Handle("POST /v1/auth/pin", s.protect(http.HandlerFunc(s.setPIN)))
 	m.Handle("POST /v1/auth/logout", s.protect(http.HandlerFunc(s.logout)))
 	m.Handle("GET /v1/me", s.protect(http.HandlerFunc(s.me)))
@@ -268,6 +271,16 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var user string
+	var enrolled bool
+	err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE phone=$1 AND password_hash IS NOT NULL)`, in.Phone).Scan(&enrolled)
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if enrolled {
+		fail(w, 409, "This account uses password sign-in")
+		return
+	}
 	err = tx.QueryRow(r.Context(), "INSERT INTO users(phone) VALUES($1) ON CONFLICT(phone) DO UPDATE SET updated_at=users.updated_at RETURNING id", in.Phone).Scan(&user)
 	if err != nil {
 		fail(w, 503, "unavailable")
@@ -357,6 +370,15 @@ func (s *Server) pinLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if locked != nil && locked.After(time.Now()) {
 		fail(w, 429, "PIN temporarily locked")
+		return
+	}
+	var passwordSet bool
+	if err = tx.QueryRow(r.Context(), `SELECT password_hash IS NOT NULL FROM users WHERE id=$1`, id).Scan(&passwordSet); err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if passwordSet {
+		fail(w, 401, "use password sign-in")
 		return
 	}
 	if hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.PIN)) != nil {

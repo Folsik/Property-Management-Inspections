@@ -97,7 +97,9 @@ export function Workspace(){
  const [notes,setNotes]=useState("");
  const [phone,setPhone]=useState("");
  const [role,setRole]=useState<"manager"|"inspector">("inspector");
- const [pin,setPin]=useState("");
+ const [currentPassword,setCurrentPassword]=useState("");
+ const [newPassword,setNewPassword]=useState("");
+ const [confirmPassword,setConfirmPassword]=useState("");
  const [managedReport,setManagedReport]=useState("");
  const [links,setLinks]=useState<{id:string;expires_at:string;revoked_at:string|null;created_at:string}[]>([]);
  const [shareURL,setShareURL]=useState("");
@@ -148,7 +150,7 @@ export function Workspace(){
  },[]);
  useEffect(()=>{if(orgID&&selectedID)void reloadDetail(orgID,selectedID);},[orgID,selectedID,reloadDetail]);
  const chooseSection=(value:Section)=>{setSection(value);setSelectedID("");setMobileMenu(false);setSearch("");setNotice("");setError("");};
- const openDialog=(value:DialogKind)=>{setDialog(value);setName("");setCity("");setStreet("");setNotes("");setPhone("");setPin("");setSeverity("normal");setRole("inspector");setInviteEmail("");setInvitationLink("");setContactCategory("tenant");setContactEmail("");setPropertyID(properties[0]?.id||"");setInspectionType("turnover");setError("");};
+ const openDialog=(value:DialogKind)=>{setDialog(value);setName("");setCity("");setStreet("");setNotes("");setPhone("");setSeverity("normal");setRole("inspector");setInviteEmail("");setInvitationLink("");setContactCategory("tenant");setContactEmail("");setPropertyID(properties[0]?.id||"");setInspectionType("turnover");setError("");};
  const refresh=async()=>{await reloadWorkspace(orgID);if(selectedID)await reloadDetail(orgID,selectedID);setNotice("Information refreshed.");};
  const completed=inspections.filter(v=>v.status==="completed").length;
  const outstanding=inspections.reduce((sum,v)=>sum+v.open_items,0);
@@ -248,10 +250,14 @@ export function Workspace(){
   try{await patch("v1/me",{full_name:profileName.trim()});setProfile(current=>current?{...current,full_name:profileName.trim()}:current);setNotice("Profile saved.");}
   catch(e){showError(e);}finally{setSaving(false);}
  }
- async function savePin(event:FormEvent){
-  event.preventDefault();setSaving(true);setError("");
-  try{await post("v1/auth/pin",{pin});setPin("");setNotice("PIN created. Existing PINs cannot be changed without a recovery flow.");}
-  catch(e){showError(e);}finally{setSaving(false);}
+ async function savePasswordChange(event:FormEvent){
+  event.preventDefault();setSaving(true);setError("");setNotice("");
+  try{
+   if(newPassword!==confirmPassword)throw Error("The new passwords do not match.");
+   await post("v1/auth/password/change",{current_password:currentPassword,new_password:newPassword});
+   setCurrentPassword("");setNewPassword("");setConfirmPassword("");
+   setNotice("Your password was updated.");
+  }catch(e){showError(e);}finally{setSaving(false);}
  }
  async function signOut(){
   await fetch("/api/auth/logout",{method:"POST"}).catch(()=>{});
@@ -347,7 +353,13 @@ export function Workspace(){
       <SectionHeading eyebrow="Preferences" title="Account settings" description="Your profile and account security."/>
       <div className="grid max-w-4xl gap-6 lg:grid-cols-2"><Card className="p-6"><div className="mb-5 flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Users className="size-5"/></div><div><h2 className="font-bold">Personal information</h2><p className="text-xs text-slate-400">Saved to your user profile</p></div></div>
        <form onSubmit={saveProfile} className="space-y-4"><Field name="Phone number"><Input disabled value={profile?.phone||""} readOnly/></Field><Field name="Display name"><Input maxLength={120} placeholder="Your full name" value={profileName} onChange={e=>setProfileName(e.target.value)}/></Field><Button type="submit" disabled={saving}>Save profile</Button></form>
-      </Card><Card className="p-6"><div className="mb-5 flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Shield className="size-5"/></div><div><h2 className="font-bold">Security PIN</h2><p className="text-xs text-slate-400">Configure a six-digit sign-in PIN</p></div></div><form className="space-y-4" onSubmit={savePin}><Field name="New PIN"><Input type="password" required pattern="[0-9]{6}" maxLength={6} inputMode="numeric" value={pin} onChange={e=>setPin(e.target.value)} placeholder="••••••"/></Field><p className="text-xs text-slate-500">Sequential or identical digits are not allowed. For security, an existing PIN cannot be overwritten here.</p><Button type="submit" disabled={saving}>Create PIN</Button></form></Card>
+      </Card><Card className="p-6"><div className="mb-5 flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Shield className="size-5"/></div><div><h2 className="font-bold">Account password</h2><p className="text-xs text-slate-400">Change your sign-in password securely</p></div></div>
+       <form className="space-y-4" onSubmit={savePasswordChange}>
+        <Field name="Current password"><Input type="password" autoComplete="current-password" required value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} placeholder="Current password"/></Field>
+        <Field name="New password"><Input type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="At least 12 characters"/></Field>
+        <Field name="Confirm new password"><Input type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat new password"/></Field>
+        <p className="text-xs text-slate-500">Use an uppercase letter, a number, a symbol and at least 12 characters. Avoid predictable phrases.</p>
+        <Button type="submit" disabled={saving||newPassword!==confirmPassword}>Update password</Button></form></Card>
       </div>
       <Card className="mt-6 max-w-4xl p-6"><h2 className="font-bold">Current organization</h2><p className="mt-1 text-sm text-slate-500">{activeOrg?.name} · Your role: <span className="capitalize">{activeOrg?.role}</span></p><p className="mt-3 text-xs text-slate-400">Organization access controls are enforced by the API for every request.</p></Card>
      </>}

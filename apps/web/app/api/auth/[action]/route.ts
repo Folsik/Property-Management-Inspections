@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {fetchBackend,sameOrigin} from "@/lib/server-api";
 import {cookies} from "next/headers";
 
-const routes:Record<string,string>={"request":"otp/request","verify":"otp/verify","pin-login":"pin/login"};
+const routes:Record<string,string>={"request":"otp/request","verify":"otp/verify","password-login":"password/login"};
 export async function POST(req:NextRequest,{params}:{params:Promise<{action:string}>}){
  const {action}=await params;
  if(!sameOrigin(req))return NextResponse.json({error:"Invalid origin"},{status:403});
