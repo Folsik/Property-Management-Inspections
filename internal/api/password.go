@@ -1,7 +1,12 @@
 package api
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	_ "embed"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -9,73 +14,99 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/text/unicode/norm"
 )
 
+// Exact-match denylist. The user-provided password is never rejected just for
+// containing a dictionary word. Extend the dataset with breached corpus checks.
+//
+//go:embed password_blocklist/10k-most-common.txt
+var embeddedCommonPasswords string
+
+func init() {
+	for _, line := range strings.Split(embeddedCommonPasswords, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if line != "" {
+			commonPasswords[strings.ToLower(line)] = true
+		}
+	}
+}
+
 var commonPasswords = map[string]bool{
-	"password": true, "password123": true, "password123!": true, "password1234!": true,
-	"qwerty": true, "qwerty123": true, "qwerty123!xyz": true, "welcome123": true,
-	"welcome123!": true, "admin123": true, "admin123!": true, "letmein": true,
-	"iloveyou": true, "changeme": true, "123456789": true, "1234567890": true,
-	"1234567890ab!": true, "aaaaaaaaaaaaa1!": true,
+	"password": true, "password123": true, "password123!": true, "qwerty": true,
+	"123456789012345": true, "qwertyqwertyqwerty": true,
+	"passwordpassword": true, "correct horse battery staple": true,
+	"letmein": true, "iloveyou": true, "welcome123": true, "admin123": true,
+	"123456789": true, "password123456789": true, "12345678901234567890": true,
+	"the quick brown fox jumps over the lazy dog": true,
 }
 
 func validatePassword(value, phone, email string) error {
-	if len(value) < 12 || len(value) > 72 || !utf8.ValidString(value) {
-		return errors.New("Password must contain 12–72 UTF-8 bytes")
+	if !utf8.ValidString(value) {
+		return errors.New("invalid UTF-8 password")
 	}
-	var upper, lowerCase, digit, symbol bool
-	for _, r := range value {
-		if unicode.IsUpper(r) {
-			upper = true
-		}
-		if unicode.IsLower(r) {
-			lowerCase = true
-		}
-		if unicode.IsDigit(r) {
-			digit = true
-		}
-		if unicode.IsPunct(r) || unicode.IsSymbol(r) {
-			symbol = true
-		}
+	normalized := norm.NFC.String(value)
+	runeCount := utf8.RuneCountInString(normalized)
+	if runeCount < 15 || runeCount > 128 || len(normalized) > 1024 {
+		return errors.New("Use a password of 15 to 128 characters (up to 1024 UTF-8 bytes)")
+	}
+	for _, r := range normalized {
 		if unicode.IsControl(r) {
-			return errors.New("Password contains unsupported control characters")
+			return errors.New("Password cannot contain control characters")
 		}
 	}
-	if !upper || !lowerCase || !digit || !symbol {
-		return errors.New("Password must include upper- and lowercase letters, digits and a special character")
-	}
-	lower := strings.ToLower(value)
+	lower := strings.ToLower(normalized)
 	if commonPasswords[lower] {
-		return errors.New("Choose a less common password")
+		return errors.New("This password is commonly used; choose a different one")
 	}
-	for _, pattern := range []string{"password", "qwerty", "123456", "654321", "abcdef", "letmein", "welcome123", "admin123", "iloveyou"} {
-		if strings.Contains(lower, pattern) {
-			return errors.New("Password is too easy to guess")
-		}
+	if email != "" && lower == strings.ToLower(email) {
+		return errors.New("Password cannot be your email address")
 	}
-	// Detect five identical consecutive characters without regex backreferences.
-	run := 1
-	for i := 1; i < len(value); i++ {
-		if value[i] == value[i-1] {
-			run++
-			if run >= 5 {
-				return errors.New("Password contains a repeated sequence")
-			}
-		} else {
-			run = 1
-		}
-	}
-	local := strings.Split(strings.ToLower(email), "@")[0]
-	if len(local) >= 4 && strings.Contains(lower, local) {
-		return errors.New("Password must not contain your email name")
-	}
-	digits := strings.TrimPrefix(phone, "+")
-	if len(digits) >= 7 && strings.Contains(lower, digits) {
-		return errors.New("Password must not contain your phone number")
+	if phone != "" && normalized == phone {
+		return errors.New("Password cannot be your phone number")
 	}
 	return nil
 }
+
+func hashPassword(value string) (string, error) {
+	normalized := []byte(norm.NFC.String(value))
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
+	}
+	// OWASP Argon2id parameter floor: 19 MiB memory, 2 passes, 1 lane.
+	digest := argon2.IDKey(normalized, salt, 2, 19*1024, 1, 32)
+	return fmt.Sprintf("$argon2id$v=19$m=19456,t=2,p=1$%s$%s",
+		base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(digest)), nil
+}
+
+func verifyPassword(hash, value string) bool {
+	if strings.HasPrefix(hash, "$2") {
+		return bcrypt.CompareHashAndPassword([]byte(hash), []byte(value)) == nil
+	}
+	parts := strings.Split(hash, "$")
+	if len(parts) != 6 || parts[1] != "argon2id" || parts[2] != "v=19" || parts[3] != "m=19456,t=2,p=1" {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil || len(salt) != 16 {
+		return false
+	}
+	target, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil || len(target) != 32 {
+		return false
+	}
+	if !utf8.ValidString(value) || len(value) > 1024 {
+		return false
+	}
+	got := argon2.IDKey([]byte(norm.NFC.String(value)), salt, 2, 19*1024, 1, 32)
+	return subtle.ConstantTimeCompare(got, target) == 1
+}
+
+// Material used only for the nonexistent-identifier comparison path.
+var dummyPasswordHash = func() string { hash, _ := hashPassword("randomly generated nonexistent-user secret"); return hash }()
 
 func (s *Server) setPassword(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -98,13 +129,13 @@ func (s *Server) setPassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, err.Error())
 		return
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+	hash, err := hashPassword(in.Password)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
 	}
-	tag, err := s.db.Exec(r.Context(), `UPDATE users SET password_hash=$2, failed_password_attempts=0,
- password_locked_until=NULL, updated_at=now() WHERE id=$1 AND password_hash IS NULL`, who(r).UserID, string(hash))
+	tag, err := s.db.Exec(r.Context(), `UPDATE users SET password_hash=$2,failed_password_attempts=0,
+ password_locked_until=NULL,updated_at=now() WHERE id=$1 AND password_hash IS NULL`, who(r).UserID, hash)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -137,29 +168,29 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	if hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.CurrentPassword)) != nil {
+	if hash == "" || !verifyPassword(hash, in.CurrentPassword) {
 		fail(w, 401, "invalid current password")
 		return
 	}
-	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.NewPassword)) == nil {
+	if verifyPassword(hash, in.NewPassword) {
 		fail(w, 400, "choose a different password")
 		return
 	}
-	existingEmail := ""
+	currentEmail := ""
 	if email != nil {
-		existingEmail = *email
+		currentEmail = *email
 	}
-	if err := validatePassword(in.NewPassword, phone, existingEmail); err != nil {
+	if err := validatePassword(in.NewPassword, phone, currentEmail); err != nil {
 		fail(w, 400, err.Error())
 		return
 	}
-	nextHash, err := bcrypt.GenerateFromPassword([]byte(in.NewPassword), bcrypt.DefaultCost)
+	nextHash, err := hashPassword(in.NewPassword)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
 	}
-	_, err = tx.Exec(r.Context(), `UPDATE users SET password_hash=$2,failed_password_attempts=0,password_locked_until=NULL,
- updated_at=now() WHERE id=$1`, who(r).UserID, string(nextHash))
+	_, err = tx.Exec(r.Context(), `UPDATE users SET password_hash=$2,failed_password_attempts=0,
+ password_locked_until=NULL,updated_at=now() WHERE id=$1`, who(r).UserID, nextHash)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -180,7 +211,7 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	identifier := strings.TrimSpace(in.Identifier)
-	if len(identifier) < 3 || len(identifier) > 254 || len(in.Password) == 0 || len(in.Password) > 72 {
+	if len(identifier) < 3 || len(identifier) > 254 || len(in.Password) == 0 || len(in.Password) > 1024 {
 		fail(w, 401, "invalid credentials")
 		return
 	}
@@ -204,8 +235,8 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 	var locked *time.Time
 	err = tx.QueryRow(r.Context(), `SELECT id,coalesce(password_hash,''),password_locked_until FROM users
  WHERE phone=$1 OR (lower(email)=$1 AND email_verified_at IS NOT NULL) FOR UPDATE`, identifier).Scan(&id, &hash, &locked)
-	if errors.Is(err, pgx.ErrNoRows) { // Make missing account roughly as expensive as a wrong password.
-		_ = bcrypt.CompareHashAndPassword([]byte(dummyPasswordHash), []byte(in.Password))
+	if errors.Is(err, pgx.ErrNoRows) {
+		_ = verifyPassword(dummyPasswordHash, in.Password)
 		fail(w, 401, "invalid credentials")
 		return
 	}
@@ -217,11 +248,9 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 429, "temporarily locked; try again later")
 		return
 	}
-	if hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Password)) != nil {
-		_, err = tx.Exec(r.Context(), `UPDATE users SET failed_password_attempts=
-   CASE WHEN failed_password_attempts>=4 THEN 0 ELSE failed_password_attempts+1 END,
-   password_locked_until=CASE WHEN failed_password_attempts>=4 THEN now()+interval '15 minutes' ELSE NULL END
-   WHERE id=$1`, id)
+	if hash == "" || !verifyPassword(hash, in.Password) {
+		_, err = tx.Exec(r.Context(), `UPDATE users SET failed_password_attempts=CASE WHEN failed_password_attempts>=4 THEN 0 ELSE failed_password_attempts+1 END,
+  password_locked_until=CASE WHEN failed_password_attempts>=4 THEN now()+interval '15 minutes' ELSE NULL END WHERE id=$1`, id)
 		if err != nil {
 			fail(w, 503, "unavailable")
 			return
@@ -244,6 +273,3 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	s.issue(w, id)
 }
-
-// bcrypt hash of a static unreachable random password, used to avoid a fast username-enumeration path.
-const dummyPasswordHash = "$2a$10$ROOskaGYq9NOqJpmrdi1bOWzuUadTBCj8Y.4.fJFBJKVnYZpGBkt."

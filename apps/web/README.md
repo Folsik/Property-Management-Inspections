@@ -62,16 +62,19 @@ The organization types are `individual` (private property owner) and `company`, 
 
 ### Team access
 
-Owner can invite managers and inspectors; manager can invite inspectors. The invitee must authenticate with phone OTP/PIN and verify **exactly the recipient email** to accept. Invitation tokens are random, hashed in PostgreSQL, single-use, expiring after 7 days, and revocable. Links shown after creation cannot be recovered from the invitation list. All access remains organization scoped.
+Owner can invite managers and inspectors; manager can invite inspectors. The invitee must authenticate with phone OTP and password and verify **exactly the recipient email** to accept. Invitation tokens are random, hashed in PostgreSQL, single-use, expiring after 7 days, and revocable. Links shown after creation cannot be recovered from the invitation list. All access remains organization scoped.
 
-## Password authentication (Nov 2026)
+## Password authentication and account recovery (Nov 2026)
 
-- **Sign up**: choose international calling code, verify phone by SMS, choose a strong password, verify email, create organization and add first property. Team members accept their organization invitation instead of creating a second property.
-- **Sign in**: enter the account's verified email **or complete international E.164 phone** together with the password.
-- Passwords must contain at least **12 characters** (maximum 72 UTF-8 bytes to avoid bcrypt truncation), upper- and lowercase letters, one digit, and one special character; weak/common predictable sequences and personal identifiers are blocked server-side.
-- Passwords are stored as **bcrypt hashes**, never plaintext; five unsuccessful login attempts temporarily lock the account for 15 minutes. Current password is required when changing it in Settings.
-- Users enrolled under the previous six-digit PIN scheme can verify their existing phone using **Sign up**, then establish a password without deleting properties, organizations or teams.
-- Password-enrolled accounts cannot obtain a full session via the old phone OTP flow, and their legacy PIN cannot be used to sign in.
-- The legacy PIN API remains for compatibility while old users migrate, but is not exposed by the web UI and is disabled for password-enrolled accounts.
-- Password-reset / account recovery for users who lost their password is **not yet implemented**. Do not suggest re-registering a password-enrolled account as recovery. This will require a distinct identity-verification flow.
-- Security design note: NIST 800-63B-4 recommends **15-character minimum and blocklists, without character-class composition requirements**. This product currently enforces the user-requested uppercase/digit/symbol rules; consider revisiting after usability and security review.
+- **Sign up**: international phone number -> SMS OTP -> password -> verified email -> organization and first property.
+- **Sign in**: verified email or E.164 phone + password. Existing PIN-only accounts still migrate through the phone verification route without losing their workspace.
+- **Password policy**: at least **15 Unicode characters**, up to **128 characters / 1024 UTF-8 bytes**. Accept Unicode and spaces; **do not require** uppercase letters, numbers or symbols. Compare complete candidate passwords with a local blocklist of known common passwords and disallow exact user email/phone identifiers. A larger compromised-password corpus integration is recommended before high-scale production.
+- **Storage**: newly enrolled / updated passwords use Argon2id (19 MiB, 2 iterations, 1 lane) with random salts and NFC normalization; legacy bcrypt hashes are still verified.
+- **Login defence**: five incorrect attempts temporarily lock password sign-in for 15 minutes. Legacy PINs and OTP signup cannot bypass established passwords.
+- **Forgot password**: `/forgot-password` always returns a generic message (whether or not the email exists). Eligible users must receive a **random 256-bit one-use reset link** by Resend on their **verified email** AND a separate **SMS OTP** by Twilio on their pre-existing registered phone. Codes and links expire after **10 minutes**; verification has a **five-attempt limit** and requests are limited per account. Email-only or SMS-only cannot change the password. Reused links are rejected.
+- Successful reset never creates a login session. It increases the user's credential epoch, making all existing access JWTs invalid, and sends a post-reset email notice. Users then sign in normally.
+- Users without access to both established channels must request **assisted identity review**; no SMS-only recovery is available.
+- **Production**: set `RESEND_API_KEY`, `EMAIL_FROM`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, and `PUBLIC_WEB_URL=https://...`. Also configure edge WAF / IP-level request limiting for recovery and login. In development, `WEB_LOCAL_OTP=true` reveals reset URL and SMS OTP only on a loopback Host.
+- **Security limitations**: the current local common-password blocklist is small and should be supplemented with a well-maintained breached-password dataset for production. Recovery request processing is synchronous and a timing side channel may remain despite generic responses; a durable asynchronous dispatch queue is recommended before public launch. If one verification channel is lost, assisted/manual recovery is not yet implemented.
+
+See [NIST SP 800-63B-4](https://pages.nist.gov/800-63-4/sp800-63b.html) and [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).

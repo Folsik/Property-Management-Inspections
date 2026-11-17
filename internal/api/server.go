@@ -49,6 +49,8 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /v1/auth/otp/verify", s.verifyOTP)
 	m.HandleFunc("POST /v1/auth/pin/login", s.pinLogin)
 	m.HandleFunc("POST /v1/auth/password/login", s.passwordLogin)
+	m.HandleFunc("POST /v1/auth/recovery/request", s.requestPasswordRecovery)
+	m.HandleFunc("POST /v1/auth/recovery/complete", s.completePasswordRecovery)
 	m.Handle("POST /v1/auth/password", s.protect(http.HandlerFunc(s.setPassword)))
 	m.Handle("POST /v1/auth/password/change", s.protect(http.HandlerFunc(s.changePassword)))
 	m.Handle("POST /v1/auth/pin", s.protect(http.HandlerFunc(s.setPIN)))
@@ -141,6 +143,11 @@ func (s *Server) protect(next http.Handler) http.Handler {
 			fail(w, 401, "revoked")
 			return
 		}
+		var epoch int64
+		if err := s.db.QueryRow(r.Context(), `SELECT auth_epoch FROM users WHERE id=$1`, c.Subject).Scan(&epoch); err != nil || epoch != c.AuthEpoch {
+			fail(w, 401, "session expired")
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principal, identity{c.Subject, c})))
 	})
 }
@@ -154,7 +161,12 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, map[string]string{"status": "ok"})
 }
 func (s *Server) issue(w http.ResponseWriter, user string) {
-	token, exp, err := s.tokens.Issue(user)
+	var epoch int64
+	if err := s.db.QueryRow(context.Background(), `SELECT auth_epoch FROM users WHERE id=$1`, user).Scan(&epoch); err != nil {
+		fail(w, 503, "auth unavailable")
+		return
+	}
+	token, exp, err := s.tokens.IssueWithEpoch(user, epoch)
 	if err != nil {
 		fail(w, 500, "could not issue token")
 		return
