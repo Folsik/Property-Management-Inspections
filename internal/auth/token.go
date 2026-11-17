@@ -22,6 +22,8 @@ type Claims struct {
 	ExpiresAt int64  `json:"exp"`
 	TokenID   string `json:"jti"`
 	AuthEpoch int64  `json:"ae"`
+ SessionID string `json:"sid,omitempty"`
+ SessionGeneration int64 `json:"sg,omitempty"`
 }
 
 type Manager struct {
@@ -77,6 +79,10 @@ func (m *Manager) Issue(subject string) (string, time.Time, error) {
 	return m.IssueWithEpoch(subject, 0)
 }
 func (m *Manager) IssueWithEpoch(subject string, epoch int64) (string, time.Time, error) {
+ return m.IssueWithSession(subject,epoch,"",0)
+}
+func (m *Manager) IssueWithSession(subject string, epoch int64, sessionID string, generation int64) (string, time.Time, error) {
+ if sessionID!="" && (generation<1||len(sessionID)!=36){return "",time.Time{},errors.New("invalid session scope")}
 	if strings.TrimSpace(subject) == "" {
 		return "", time.Time{}, errors.New("token subject must not be empty")
 	}
@@ -87,7 +93,7 @@ func (m *Manager) IssueWithEpoch(subject string, epoch int64) (string, time.Time
 		return "", time.Time{}, err
 	}
 	claims := Claims{
-		Subject: subject, Issuer: m.issuer, IssuedAt: now.Unix(), AuthEpoch: epoch,
+		Subject: subject, Issuer: m.issuer, IssuedAt: now.Unix(), AuthEpoch: epoch, SessionID:sessionID, SessionGeneration:generation,
 		ExpiresAt: exp.Unix(), TokenID: base64.RawURLEncoding.EncodeToString(idBytes),
 	}
 	header, err := json.Marshal(map[string]string{"alg": "EdDSA", "typ": "JWT"})
