@@ -157,7 +157,7 @@ func (s *Server) storageCopy(ctx context.Context, storage mediaStorage, source, 
 	if len(data) > 65536 {
 		return errors.New("oversized storage copy response")
 	}
-	if res.StatusCode != 200 || bytes.Contains(bytes.ToLower(data), []byte("<error>")) {
+	if res.StatusCode != 200 || bytes.Contains(bytes.ToLower(data), []byte("<error")) {
 		return fmt.Errorf("storage copy failed: HTTP %d", res.StatusCode)
 	}
 	return nil
