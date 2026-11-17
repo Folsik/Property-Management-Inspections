@@ -14,11 +14,9 @@ import type {OnboardingStatus,Organization} from "@/lib/types";
 type Step="password"|"email"|"organization"|"property"|"profile"|"invitation"|"finish";
 type InvitePreview={organization_name:string;role:string;expires_at:string};
 const passwordRules=[
- {label:"At least 12 characters",test:(value:string)=>value.length>=12&&new TextEncoder().encode(value).length<=72},
- {label:"An uppercase letter",test:(value:string)=>/[A-Z]/.test(value)},
- {label:"A lowercase letter",test:(value:string)=>/[a-z]/.test(value)},
- {label:"A number",test:(value:string)=>/[0-9]/.test(value)},
- {label:"A special character",test:(value:string)=>/[^\w\s]/.test(value)},
+ {label:"At least 15 characters",test:(value:string)=>Array.from(value.normalize("NFC")).length>=15},
+ {label:"No more than 128 characters",test:(value:string)=>Array.from(value.normalize("NFC")).length<=128},
+ {label:"Maximum 1024 UTF-8 bytes",test:(value:string)=>new TextEncoder().encode(value.normalize("NFC")).length<=1024},
 ];
 const milestones=[{label:"Secure your account",icon:KeyRound},{label:"Verify email",icon:Mail},{label:"Your workspace",icon:Building2},{label:"First property",icon:Home}];
 function pickStep(state:OnboardingStatus,invitation:boolean):Step{
@@ -30,7 +28,7 @@ function pickStep(state:OnboardingStatus,invitation:boolean):Step{
  return "finish";
 }
 const titles:Record<Step,[string,string]>={
- password:["Create your password","Use at least 12 characters and a unique strong password."],
+ password:["Create your password","Use a unique passphrase of at least 15 characters. Spaces and Unicode are welcome."],
  email:["Verify your email","We'll send a six-digit code to your inbox."],
  organization:["Tell us about your workspace","Create a home for your properties, inspections and people."],
  property:["Add your first property","Start with the basics. You can add photos and details later."],
@@ -162,11 +160,11 @@ export function Onboarding({token}:{token:string}){
     <p className="mb-8 mt-2 text-sm leading-relaxed text-slate-500">{titles[step][1]}</p>
     {error&&<div role="alert" className="mb-5 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
     {step==="password"&&<form className="space-y-5" onSubmit={savePassword}>
-      <Label title="Create password"><Input type={showPassword?"text":"password"} autoComplete="new-password" minLength={12} maxLength={72} required placeholder="Create a unique password" value={password} onChange={e=>setPassword(e.target.value)}/></Label>
+      <Label title="Create password"><Input type={showPassword?"text":"password"} autoComplete="new-password" minLength={15} required placeholder="Create a unique password" value={password} onChange={e=>setPassword(e.target.value)}/></Label>
       <div className="grid gap-1.5">{passwordRules.map(rule=><p key={rule.label} className={`flex items-center gap-2 text-xs ${rule.test(password)?"text-emerald-700":"text-slate-500"}`}><Check className="size-3.5"/>{rule.label}</p>)}</div>
-      <Label title="Confirm password"><Input type={showPassword?"text":"password"} autoComplete="new-password" minLength={12} maxLength={72} required placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></Label>
+      <Label title="Confirm password"><Input type={showPassword?"text":"password"} autoComplete="new-password" minLength={15} required placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></Label>
       <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={showPassword} onChange={e=>setShowPassword(e.target.checked)}/>Show passwords</label>
-      <p className="text-xs text-slate-500">Avoid common phrases, personal information and repeated characters. A password manager is recommended.</p>
+      <p className="text-xs text-slate-500">Common or compromised passwords are blocked. No special characters or capitals are required. Use a password manager if possible.</p>
       <Button className="w-full" disabled={busy||!passwordRules.every(rule=>rule.test(password))||password!==confirmPassword}>{busy?"Saving…":"Save password & continue"}<ArrowRight className="size-4"/></Button>
     </form>}
     {step==="email"&&(!emailSent?<form className="space-y-5" onSubmit={requestEmail}>

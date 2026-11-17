@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
       {key:"Referrer-Policy",value:"no-referrer"},
       {key:"Cache-Control",value:"private, no-store"},
       {key:"X-Robots-Tag",value:"noindex, nofollow"},
+    ]},{source:"/reset-password",headers:[
+      {key:"Referrer-Policy",value:"no-referrer"},
+      {key:"Cache-Control",value:"private, no-store"},
+      {key:"X-Robots-Tag",value:"noindex, nofollow"},
+    ]},{source:"/forgot-password",headers:[
+      {key:"Referrer-Policy",value:"no-referrer"},
+      {key:"Cache-Control",value:"private, no-store"},
+      {key:"X-Robots-Tag",value:"noindex, nofollow"},
     ]}];
   },
 };

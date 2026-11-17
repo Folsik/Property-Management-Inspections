@@ -356,9 +356,9 @@ export function Workspace(){
       </Card><Card className="p-6"><div className="mb-5 flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Shield className="size-5"/></div><div><h2 className="font-bold">Account password</h2><p className="text-xs text-slate-400">Change your sign-in password securely</p></div></div>
        <form className="space-y-4" onSubmit={savePasswordChange}>
         <Field name="Current password"><Input type="password" autoComplete="current-password" required value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} placeholder="Current password"/></Field>
-        <Field name="New password"><Input type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="At least 12 characters"/></Field>
-        <Field name="Confirm new password"><Input type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat new password"/></Field>
-        <p className="text-xs text-slate-500">Use an uppercase letter, a number, a symbol and at least 12 characters. Avoid predictable phrases.</p>
+        <Field name="New password"><Input type="password" autoComplete="new-password" minLength={15} required value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="At least 15 characters"/></Field>
+        <Field name="Confirm new password"><Input type="password" autoComplete="new-password" minLength={15} required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat new password"/></Field>
+        <p className="text-xs text-slate-500">Use at least 15 characters. Spaces and Unicode are allowed; common passwords are blocked. No symbol or uppercase rule.</p>
         <Button type="submit" disabled={saving||newPassword!==confirmPassword}>Update password</Button></form></Card>
       </div>
       <Card className="mt-6 max-w-4xl p-6"><h2 className="font-bold">Current organization</h2><p className="mt-1 text-sm text-slate-500">{activeOrg?.name} · Your role: <span className="capitalize">{activeOrg?.role}</span></p><p className="mt-3 text-xs text-slate-400">Organization access controls are enforced by the API for every request.</p></Card>

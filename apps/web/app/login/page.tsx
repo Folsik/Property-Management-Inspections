@@ -8,6 +8,7 @@ import {Card} from "@/components/ui/card";
 import {Dialog,DialogContent,DialogDescription,DialogTitle} from "@/components/ui/dialog";
 import {COUNTRY_DIAL_CODES,countryFlag} from "@/lib/country-codes";
 import {formatE164} from "@/lib/phone";
+import Link from "next/link";
 
 export default function Login(){
  const router=useRouter();
@@ -72,6 +73,7 @@ export default function Login(){
       {mode==="signin"?<>
        <label className="block space-y-2"><span className="text-sm font-semibold">Email or phone number</span><Input autoComplete="username" required value={identifier} onChange={e=>setIdentifier(e.target.value)} placeholder="you@example.com or +447700900123"/></label>
        <label className="block space-y-2"><span className="text-sm font-semibold">Password</span><div className="relative"><Input type={visible?"text":"password"} autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password" className="pr-12"/><button type="button" aria-label={visible?"Hide password":"Show password"} className="absolute right-3 top-3 text-slate-500" onClick={()=>setVisible(v=>!v)}>{visible?<EyeOff className="size-5"/>:<Eye className="size-5"/>}</button></div></label>
+       <div className="text-right"><Link href="/forgot-password" className="text-sm font-semibold text-blue-600 hover:underline">Forgot password?</Link></div>
       </>:<>
        <label className="block space-y-2"><span className="text-sm font-semibold">Phone number</span><div className="flex gap-2"><button type="button" disabled={step==="verify"} aria-label="Choose country calling code" onClick={()=>{setCountryDialog(true);setCountrySearch("");}} className="flex h-11 min-w-[126px] items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold disabled:opacity-50">{countryFlag(selected.iso)} {selected.dial}<ChevronsUpDown className="size-4 text-slate-400"/></button><Input type="tel" autoComplete="tel-national" inputMode="tel" required placeholder="National phone number" value={nationalPhone} disabled={step==="verify"} onChange={e=>setNationalPhone(e.target.value)}/></div></label>
        {phone&&<p className="text-xs text-blue-600">International number: {phone}</p>}
