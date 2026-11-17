@@ -37,7 +37,7 @@ func TestPostgresSmoke(t *testing.T) {
 		t.Fatalf("idempotent database migration: %v", err)
 	}
 	var versions int
-	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 7 {
+	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 8 {
 		t.Fatalf("migration versions: count=%d err=%v", versions, err)
 	}
 	tokens, err := auth.NewManager("integration-test", 15*time.Minute)
@@ -108,9 +108,17 @@ func TestPostgresSmoke(t *testing.T) {
 	org := call("POST", "/v1/organizations", owner, map[string]any{"name": "Test Org"}, 201)["id"].(string)
 	call("GET", "/v1/organizations", owner, nil, 200)
 	call("GET", "/v1/organizations/"+org+"/properties", outsider, nil, 403)
-	call("POST", "/v1/organizations/"+org+"/members", owner, map[string]any{"phone": inspectorPhone, "role": "inspector"}, 201)
-	call("POST", "/v1/organizations/"+org+"/members", owner, map[string]any{"phone": inspectorPhone, "role": "manager"}, 409)
-	call("POST", "/v1/organizations/"+org+"/members", inspector, map[string]any{"phone": outsiderPhone, "role": "manager"}, 403)
+	call("POST", "/v1/organizations/"+org+"/members", owner, map[string]any{"phone": inspectorPhone, "role": "inspector"}, 410)
+	call("POST", "/v1/organizations/"+org+"/members", owner, map[string]any{"phone": inspectorPhone, "role": "manager"}, 410)
+	// Email invitation + verified matching email is the only authorized team join route.
+	inspectorEmail := fmt.Sprintf("testinspector-%08d@example.test", suffix)
+	invite := call("POST", "/v1/organizations/"+org+"/invitations", owner,
+		map[string]any{"email": inspectorEmail, "role": "inspector"}, 201)
+	challenge := call("POST", "/v1/email/request", inspector, map[string]any{"email": inspectorEmail}, 202)
+	call("POST", "/v1/email/verify", inspector, map[string]any{
+		"email": inspectorEmail, "code": challenge["dev_code"]}, 200)
+	call("POST", "/v1/invitations/"+invite["token"].(string)+"/accept", inspector, map[string]any{}, 200)
+	call("POST", "/v1/organizations/"+org+"/members", inspector, map[string]any{"phone": outsiderPhone, "role": "manager"}, 410)
 	call("POST", "/v1/organizations/"+org+"/properties", inspector, map[string]any{"name": "Forbidden"}, 403)
 
 	property := call("POST", "/v1/organizations/"+org+"/properties", owner, map[string]any{"name": "Apartment A", "address": map[string]any{"city": "London"}}, 201)["id"].(string)

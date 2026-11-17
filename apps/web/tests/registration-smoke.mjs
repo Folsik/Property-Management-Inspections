@@ -5,6 +5,15 @@ import {randomInt} from "node:crypto";
 const base=process.env.SMOKE_ORIGIN||"http://127.0.0.1:3000";
 const phone="+1555"+String(randomInt(10000000,99999999));
 let session="";
+function combineCookies(existing,setCookie){
+ const values=new Map(existing.split(";").map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf("=");return [x.slice(0,i),x.slice(i+1)];}));
+ for(const header of setCookie){const first=header.split(";")[0];const index=first.indexOf("=");if(index>0){
+  const name=first.slice(0,index),value=first.slice(index+1);
+  if(value)values.set(name,value);else values.delete(name);
+ }}
+ return [...values].map(([k,v])=>k+"="+v).join("; ");
+}
+function cookieHeader(setCookie){return combineCookies("",setCookie);}
 async function request(path,method="GET",body=null,authenticated=true){
  const response=await fetch(base+path,{
   method,
@@ -18,7 +27,9 @@ async function request(path,method="GET",body=null,authenticated=true){
  const text=await response.text();
  let data;
  try{data=JSON.parse(text);}catch{data={raw:text.slice(0,200)};}
- return {status:response.status,data,cookie:response.headers.get("set-cookie")};
+ const cookies=response.headers.getSetCookie();
+ if(authenticated&&cookies.length)session=combineCookies(session,cookies);
+ return {status:response.status,data,cookie:cookies.find(x=>x.startsWith("inspectly_session="))||null,cookies};
 }
 const denied=await request("/api/auth/request","POST",{phone},false);
 assert.notEqual(denied.data.error,"Invalid origin","Valid loopback Origin must never be rejected");
@@ -28,8 +39,21 @@ assert.match(denied.data.dev_code,/^\d{6}$/,"Local development should expose cod
 const verify=await request("/api/auth/verify","POST",{phone,code:denied.data.dev_code},false);
 assert.equal(verify.status,200,JSON.stringify(verify.data));
 assert.equal(verify.data.ok,true);
-session=verify.cookie?.split(";")[0]||"";
+session=cookieHeader(verify.cookies);
 assert.ok(session.startsWith("inspectly_session="),"Expected HttpOnly session cookie");
+assert.ok(session.includes("inspectly_refresh="),"Expected separate HttpOnly refresh cookie");
+const originalAccessCookie=session.split(";").find(x=>x.trim().startsWith("inspectly_session=")).trim();
+const rotated=await request("/api/auth/refresh","POST",{});
+assert.equal(rotated.status,200,JSON.stringify(rotated.data));
+assert.equal(rotated.data.ok,true);
+assert.ok(rotated.cookies.some(c=>c.startsWith("inspectly_refresh=")));
+const newRefreshCookie=session.split(";").find(x=>x.trim().startsWith("inspectly_refresh=")).trim();
+session=originalAccessCookie+"; "+newRefreshCookie;
+const autoRenew=await request("/api/backend/v1/me");
+assert.equal(autoRenew.status,200,JSON.stringify(autoRenew.data));
+assert.ok(autoRenew.cookies.some(c=>c.startsWith("inspectly_session=")),
+ "BFF must transparently retry with rotated access token");
+
 const profile=await request("/api/backend/v1/me");
 assert.equal(profile.status,200,JSON.stringify(profile.data));
 assert.equal(profile.data.phone,phone);
@@ -65,6 +89,18 @@ assert.equal(notYetComplete.status,409,"Cannot finish without organization and p
 const org=await request("/api/backend/v1/organizations","POST",{name:"CI registration smoke",kind:"individual",country:"GB"});
 assert.equal(org.status,201,JSON.stringify(org.data));
 assert.ok(org.data.id);
+const directMember=await request("/api/backend/v1/organizations/"+org.data.id+"/members","POST",{phone,role:"inspector"});
+assert.equal(directMember.status,410,"Legacy direct member additions must be disabled");
+const activeSessions=await request("/api/backend/v1/auth/sessions");
+assert.equal(activeSessions.status,200,JSON.stringify(activeSessions.data));
+assert.ok(activeSessions.data.items.length>=2,"Account should have multiple device sessions");
+const anotherDevice=activeSessions.data.items.find(item=>!item.current);
+assert.ok(anotherDevice);
+const removeDevice=await request("/api/backend/v1/auth/sessions/"+anotherDevice.id,"DELETE",{});
+assert.equal(removeDevice.status,200,JSON.stringify(removeDevice.data));
+const sessionStillValid=await request("/api/backend/v1/me");
+assert.equal(sessionStillValid.status,200,"Revoking another device must not revoke this one");
+
 const properties=await request("/api/backend/v1/organizations/"+org.data.id+"/properties","POST",{name:"CI test apartment",address:{city:"Local integration test"}});
 assert.equal(properties.status,201,JSON.stringify(properties.data));
 const finish=await request("/api/backend/v1/onboarding/complete","POST",{});
@@ -86,7 +122,7 @@ const workerOTP=await request("/api/auth/request","POST",{phone:workerPhone},fal
 assert.equal(workerOTP.status,202,JSON.stringify(workerOTP.data));
 const workerVerify=await request("/api/auth/verify","POST",{phone:workerPhone,code:workerOTP.data.dev_code},false);
 assert.equal(workerVerify.status,200,JSON.stringify(workerVerify.data));
-session=workerVerify.cookie?.split(";")[0]||"";
+session=cookieHeader(workerVerify.cookies);
 assert.ok(session.startsWith("inspectly_session="));
 const beforeVerification=await request("/api/backend/v1/invitations/"+invitation.data.token+"/accept","POST",{});
 assert.equal(beforeVerification.status,403);
@@ -127,12 +163,15 @@ const oldPasswordRejected=await request("/api/auth/password-login","POST",{ident
 assert.equal(oldPasswordRejected.status,401);
 const recoveredLogin=await request("/api/auth/password-login","POST",{identifier:email,password:newPassword},false);
 assert.equal(recoveredLogin.status,200,JSON.stringify(recoveredLogin.data));
-session=recoveredLogin.cookie?.split(";")[0]||"";
+session=cookieHeader(recoveredLogin.cookies);
 assert.ok(session.startsWith("inspectly_session="));
 const restoredProfile=await request("/api/backend/v1/me");
 assert.equal(restoredProfile.status,200,JSON.stringify(restoredProfile.data));
 const crossOrigin=await fetch(base+"/api/backend/v1/organizations",{method:"POST",headers:{Origin:"https://attacker.example","Content-Type":"application/json",Cookie:session},body:JSON.stringify({name:"Must not create"})});
 assert.equal(crossOrigin.status,403,"Cross-site writes must be rejected");
 const logout=await request("/api/auth/logout","POST",{});
-assert.equal(logout.status,200);
-console.log("PASS: OTP → password → email verified → personal/company workspace → property → inspection → secure invitation/acceptance → email+SMS recovery → session revocation → CSRF rejection → logout");
+assert.equal(logout.status,200,JSON.stringify(logout.data));
+assert.equal(session,"","Logout must clear both browser session cookies");
+const afterLogout=await request("/api/backend/v1/me");
+assert.equal(afterLogout.status,401,"Logged-out client must not access private data");
+console.log("PASS: refresh rotation/BFF renewal/device revocation → OTP → password → email verified → personal/company workspace → property → inspection → secure invitation/acceptance → email+SMS recovery → session revocation → CSRF rejection → logout");

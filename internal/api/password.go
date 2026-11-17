@@ -190,7 +190,13 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = tx.Exec(r.Context(), `UPDATE users SET password_hash=$2,failed_password_attempts=0,
- password_locked_until=NULL,updated_at=now() WHERE id=$1`, who(r).UserID, nextHash)
+ password_locked_until=NULL,auth_epoch=auth_epoch+1,updated_at=now() WHERE id=$1`, who(r).UserID, nextHash)
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	_, err = tx.Exec(r.Context(), `UPDATE auth_sessions SET revoked_at=now(),revocation_reason='password_changed'
+ WHERE user_id=$1 AND revoked_at IS NULL`, who(r).UserID)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -271,5 +277,5 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	s.issue(w, id)
+	s.issue(w, r, id)
 }
