@@ -142,14 +142,16 @@ func TestGuidedOnboardingAndInvitations(t *testing.T) {
 	call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "Welcome!Rivers32Lake"}, 401)
 	call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "New#SeasideHarbor84"}, 200)
 	// Recovery requires both an email token and a phone code and never grants a session.
-	resetEmail:=call("POST","/v1/auth/recovery/request","",map[string]string{"email":workerEmail},202)
-	if resetEmail["dev_token"]==nil||resetEmail["dev_code"]==nil{t.Fatal("development recovery challenge missing")}
-	call("POST","/v1/auth/recovery/request","",map[string]string{"email":"nonexistent-"+workerEmail},202)
-	call("POST","/v1/auth/recovery/complete","",map[string]string{"token":resetEmail["dev_token"].(string),"code":"000000","password":"an entirely new long passphrase"},401)
-	call("POST","/v1/auth/recovery/complete","",map[string]string{"token":resetEmail["dev_token"].(string),"code":resetEmail["dev_code"].(string),"password":"a fresh strong passphrase from memory"},200)
-	call("POST","/v1/auth/recovery/complete","",map[string]string{"token":resetEmail["dev_token"].(string),"code":resetEmail["dev_code"].(string),"password":"yet another entirely new passphrase"},401)
-	call("GET","/v1/me",worker,nil,401)
-	call("POST","/v1/auth/password/login","",map[string]string{"identifier":workerEmail,"password":"a fresh strong passphrase from memory"},200)
+	resetEmail := call("POST", "/v1/auth/recovery/request", "", map[string]string{"email": workerEmail}, 202)
+	if resetEmail["dev_token"] == nil || resetEmail["dev_code"] == nil {
+		t.Fatal("development recovery challenge missing")
+	}
+	call("POST", "/v1/auth/recovery/request", "", map[string]string{"email": "nonexistent-" + workerEmail}, 202)
+	call("POST", "/v1/auth/recovery/complete", "", map[string]string{"token": resetEmail["dev_token"].(string), "code": "000000", "password": "an entirely new long passphrase"}, 401)
+	call("POST", "/v1/auth/recovery/complete", "", map[string]string{"token": resetEmail["dev_token"].(string), "code": resetEmail["dev_code"].(string), "password": "a fresh strong passphrase from memory"}, 200)
+	call("POST", "/v1/auth/recovery/complete", "", map[string]string{"token": resetEmail["dev_token"].(string), "code": resetEmail["dev_code"].(string), "password": "yet another entirely new passphrase"}, 401)
+	call("GET", "/v1/me", worker, nil, 401)
+	call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "a fresh strong passphrase from memory"}, 200)
 	// Five failed password attempts lock the account, including for a correct password.
 	for i := 0; i < 5; i++ {
 		call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "wrong-password"}, 401)
