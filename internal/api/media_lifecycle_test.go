@@ -217,23 +217,37 @@ func TestMediaLifecycleAndTenantIsolation(t *testing.T) {
 	request("DELETE", base+"/"+id, ownerJWT, "", 200)
 	request("GET", base+"/"+id+"/download", ownerJWT, "", 404)
 
- // Deliberately uploaded fake JPEG: correct metadata must not bypass signature verification.
- forged:=request("POST",base+"/presign",ownerJWT,`{"mime_type":"image/jpeg","size_bytes":6}`,201)
- fakePUT,err:=http.NewRequestWithContext(ctx,"PUT",forged["upload_url"].(string),bytes.NewReader([]byte("FAKEXX")))
- if err!=nil{t.Fatal(err)}
- fakePUT.Header.Set("Content-Type","image/jpeg")
- fakeRes,err:=fake.Client().Do(fakePUT);if err!=nil{t.Fatal(err)};fakeRes.Body.Close()
- if fakeRes.StatusCode!=200{t.Fatal("mock upload failed")}
- request("POST",base+"/"+forged["id"].(string)+"/confirm",ownerJWT,"{}",422)
- request("GET",base+"/"+forged["id"].(string)+"/download",ownerJWT,"",409)
- // Even correctly signed MIME cannot conceal a mismatching physical object size.
- oversized:=request("POST",base+"/presign",ownerJWT,`{"mime_type":"image/jpeg","size_bytes":6}`,201)
- bigPUT,err:=http.NewRequestWithContext(ctx,"PUT",oversized["upload_url"].(string),bytes.NewReader([]byte{0xff,0xd8,0xff,0xe0,0,0,0}))
- if err!=nil{t.Fatal(err)}
- bigPUT.Header.Set("Content-Type","image/jpeg")
- bigRes,err:=fake.Client().Do(bigPUT);if err!=nil{t.Fatal(err)};bigRes.Body.Close()
- request("POST",base+"/"+oversized["id"].(string)+"/confirm",ownerJWT,"{}",422)
- 
+	// Deliberately uploaded fake JPEG: correct metadata must not bypass signature verification.
+	forged := request("POST", base+"/presign", ownerJWT, `{"mime_type":"image/jpeg","size_bytes":6}`, 201)
+	fakePUT, err := http.NewRequestWithContext(ctx, "PUT", forged["upload_url"].(string), bytes.NewReader([]byte("FAKEXX")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakePUT.Header.Set("Content-Type", "image/jpeg")
+	fakeRes, err := fake.Client().Do(fakePUT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakeRes.Body.Close()
+	if fakeRes.StatusCode != 200 {
+		t.Fatal("mock upload failed")
+	}
+	request("POST", base+"/"+forged["id"].(string)+"/confirm", ownerJWT, "{}", 422)
+	request("GET", base+"/"+forged["id"].(string)+"/download", ownerJWT, "", 409)
+	// Even correctly signed MIME cannot conceal a mismatching physical object size.
+	oversized := request("POST", base+"/presign", ownerJWT, `{"mime_type":"image/jpeg","size_bytes":6}`, 201)
+	bigPUT, err := http.NewRequestWithContext(ctx, "PUT", oversized["upload_url"].(string), bytes.NewReader([]byte{0xff, 0xd8, 0xff, 0xe0, 0, 0, 0}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bigPUT.Header.Set("Content-Type", "image/jpeg")
+	bigRes, err := fake.Client().Do(bigPUT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bigRes.Body.Close()
+	request("POST", base+"/"+oversized["id"].(string)+"/confirm", ownerJWT, "{}", 422)
+
 	// Pending rows that outlive the expiry must be garbage collected, not served.
 	stale := request("POST", base+"/presign", ownerJWT, `{"mime_type":"image/jpeg","size_bytes":6}`, 201)
 	staleID := stale["id"].(string)
