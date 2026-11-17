@@ -82,3 +82,7 @@ See [NIST SP 800-63B-4](https://pages.nist.gov/800-63-4/sp800-63b.html) and [OWA
 ### Session renewal
 
 Next.js middleware renews protected pages near expiry; the BFF retries once on 401, rotates the refresh cookie and never exposes secrets to client JavaScript. Account settings show active device sessions. See [auth sessions](../../docs/auth-sessions.md).
+
+### Verified photo/audio uploads
+
+Inspectly uses a presign → direct browser PUT → confirm workflow. Only HEAD-verified, magic-byte-checked immutable copies can be downloaded from short-lived S3/R2 GET URLs. Uploads that fail confirmation remain pending or rejected with a retry button. Uploaded or pending entries can be deleted from the inspection. See [Media Service](../../docs/media-lifecycle.md).
