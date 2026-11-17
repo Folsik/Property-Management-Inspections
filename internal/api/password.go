@@ -24,10 +24,13 @@ func validatePassword(value, phone, email string) error {
 	if len(value) < 12 || len(value) > 72 || !utf8.ValidString(value) {
 		return errors.New("Password must contain 12–72 UTF-8 bytes")
 	}
-	var upper, digit, symbol bool
+	var upper, lowerCase, digit, symbol bool
 	for _, r := range value {
 		if unicode.IsUpper(r) {
 			upper = true
+		}
+		if unicode.IsLower(r) {
+			lowerCase = true
 		}
 		if unicode.IsDigit(r) {
 			digit = true
@@ -39,8 +42,8 @@ func validatePassword(value, phone, email string) error {
 			return errors.New("Password contains unsupported control characters")
 		}
 	}
-	if !upper || !digit || !symbol {
-		return errors.New("Password must include uppercase letters, digits and a special character")
+	if !upper || !lowerCase || !digit || !symbol {
+		return errors.New("Password must include upper- and lowercase letters, digits and a special character")
 	}
 	lower := strings.ToLower(value)
 	if commonPasswords[lower] {

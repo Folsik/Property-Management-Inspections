@@ -16,6 +16,7 @@ type InvitePreview={organization_name:string;role:string;expires_at:string};
 const passwordRules=[
  {label:"At least 12 characters",test:(value:string)=>value.length>=12&&new TextEncoder().encode(value).length<=72},
  {label:"An uppercase letter",test:(value:string)=>/[A-Z]/.test(value)},
+ {label:"A lowercase letter",test:(value:string)=>/[a-z]/.test(value)},
  {label:"A number",test:(value:string)=>/[0-9]/.test(value)},
  {label:"A special character",test:(value:string)=>/[^\w\s]/.test(value)},
 ];
