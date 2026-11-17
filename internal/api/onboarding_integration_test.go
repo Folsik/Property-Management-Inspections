@@ -147,4 +147,3 @@ func TestGuidedOnboardingAndInvitations(t *testing.T) {
 	}
 	call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "New#SeasideHarbor84"}, 429)
 }
-
