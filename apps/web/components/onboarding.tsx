@@ -11,11 +11,17 @@ import {COUNTRY_DIAL_CODES,countryFlag} from "@/lib/country-codes";
 import {get,post,patch} from "@/lib/api";
 import type {OnboardingStatus,Organization} from "@/lib/types";
 
-type Step="pin"|"email"|"organization"|"property"|"profile"|"invitation"|"finish";
+type Step="password"|"email"|"organization"|"property"|"profile"|"invitation"|"finish";
 type InvitePreview={organization_name:string;role:string;expires_at:string};
+const passwordRules=[
+ {label:"At least 12 characters",test:(value:string)=>value.length>=12&&new TextEncoder().encode(value).length<=72},
+ {label:"An uppercase letter",test:(value:string)=>/[A-Z]/.test(value)},
+ {label:"A number",test:(value:string)=>/[0-9]/.test(value)},
+ {label:"A special character",test:(value:string)=>/[^\\w\\s]/.test(value)},
+];
 const milestones=[{label:"Secure your account",icon:KeyRound},{label:"Verify email",icon:Mail},{label:"Your workspace",icon:Building2},{label:"First property",icon:Home}];
 function pickStep(state:OnboardingStatus,invitation:boolean):Step{
- if(!state.pin_set)return "pin";
+ if(!state.password_set)return "password";
  if(!state.email_verified)return "email";
  if(invitation)return state.full_name.trim()?"invitation":"profile";
  if(!state.has_organization)return "organization";
@@ -42,7 +48,8 @@ export function Onboarding({token}:{token:string}){
  const [loading,setLoading]=useState(true);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
- const [pin,setPin]=useState("");const [confirmPIN,setConfirmPIN]=useState("");
+ const [password,setPassword]=useState("");const [confirmPassword,setConfirmPassword]=useState("");
+ const [showPassword,setShowPassword]=useState(false);
  const [email,setEmail]=useState("");const [emailCode,setEmailCode]=useState("");
  const [emailSent,setEmailSent]=useState(false);
  const [changeEmail,setChangeEmail]=useState(false);const [localCode,setLocalCode]=useState("");
@@ -77,15 +84,15 @@ export function Onboarding({token}:{token:string}){
      const result=await response.json();
      if(!response.ok)throw Error(result.error||"This invitation is no longer available");
      if(active)setInvite(result);
-    }else if(state.completed)router.replace("/dashboard");
+    }else if(state.completed&&state.password_set)router.replace("/dashboard");
    }catch(e){if(active)setError(e instanceof Error?e.message:"Unable to load your account");}
    finally{if(active)setLoading(false);}
   }
   void initial();return()=>{active=false;};
  },[refresh,router,token]);
 
- const step=useMemo<Step>(()=>status?(changeEmail&&status.pin_set?"email":pickStep(status,!!token)):"pin",[status,token,changeEmail]);
- const progress=step==="pin"?0:step==="email"?1:step==="organization"||step==="profile"||step==="invitation"?2:3;
+ const step=useMemo<Step>(()=>status?(changeEmail&&status.password_set?"email":pickStep(status,!!token)):"pin",[status,token,changeEmail]);
+ const progress=step==="password"?0:step==="email"?1:step==="organization"||step==="profile"||step==="invitation"?2:3;
  const execute=async(work:()=>Promise<void>)=>{
   setBusy(true);setError("");
   try{await work();}
@@ -147,16 +154,18 @@ export function Onboarding({token}:{token:string}){
    </div>
    <Card className="overflow-hidden p-6 shadow-xl shadow-blue-950/5 sm:p-10">
     <div className="mb-6 flex size-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-     {step==="pin"?<KeyRound/>:step==="email"?<Mail/>:step==="organization"?<Building2/>:step==="property"?<Home/>:step==="profile"?<UserRound/>:<Users/>}
+     {step==="password"?<KeyRound/>:step==="email"?<Mail/>:step==="organization"?<Building2/>:step==="property"?<Home/>:step==="profile"?<UserRound/>:<Users/>}
     </div>
     <h1 className="text-2xl font-bold tracking-tight text-[#0c2040] sm:text-3xl">{titles[step][0]}</h1>
     <p className="mb-8 mt-2 text-sm leading-relaxed text-slate-500">{titles[step][1]}</p>
     {error&&<div role="alert" className="mb-5 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-    {step==="pin"&&<form className="space-y-5" onSubmit={savePIN}>
-      <Label title="Six-digit PIN"><Input type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required placeholder="••••••" value={pin} onChange={e=>setPin(e.target.value)}/></Label>
-      <Label title="Confirm PIN"><Input type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required placeholder="••••••" value={confirmPIN} onChange={e=>setConfirmPIN(e.target.value)}/></Label>
-      <p className="text-xs text-slate-500">Avoid repeated or sequential digits. Never share your PIN.</p>
-      <Button className="w-full" disabled={busy}>{busy?"Saving…":"Save PIN & continue"}<ArrowRight className="size-4"/></Button>
+    {step==="password"&&<form className="space-y-5" onSubmit={savePassword}>
+      <Label title="Create password"><Input type={showPassword?"text":"password"} autoComplete="new-password" minLength={12} maxLength={72} required placeholder="Create a unique password" value={password} onChange={e=>setPassword(e.target.value)}/></Label>
+      <div className="grid gap-1.5">{passwordRules.map(rule=><p key={rule.label} className={`flex items-center gap-2 text-xs ${rule.test(password)?"text-emerald-700":"text-slate-500"}`}><Check className="size-3.5"/>{rule.label}</p>)}</div>
+      <Label title="Confirm password"><Input type={showPassword?"text":"password"} autoComplete="new-password" minLength={12} maxLength={72} required placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></Label>
+      <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={showPassword} onChange={e=>setShowPassword(e.target.checked)}/>Show passwords</label>
+      <p className="text-xs text-slate-500">Avoid common phrases, personal information and repeated characters. A password manager is recommended.</p>
+      <Button className="w-full" disabled={busy||!passwordRules.every(rule=>rule.test(password))||password!==confirmPassword}>{busy?"Saving…":"Save password & continue"}<ArrowRight className="size-4"/></Button>
     </form>}
     {step==="email"&&(!emailSent?<form className="space-y-5" onSubmit={requestEmail}>
       <Label title="Email address"><Input type="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)}/></Label>

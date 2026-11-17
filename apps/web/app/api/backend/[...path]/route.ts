@@ -8,7 +8,7 @@ const allowed=[
  /^v1\/onboarding$/,
  /^v1\/onboarding\/complete$/,
  /^v1\/email\/(request|verify)$/,
- /^v1\/auth\/pin$/,
+ /^v1\/auth\/password$/,
  /^v1\/invitations\/[0-9a-f]{64}\/accept$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/invitations$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/invitations\/[0-9a-f-]{36}$/,

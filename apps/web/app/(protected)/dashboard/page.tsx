@@ -8,7 +8,7 @@ export default async function Dashboard(){
   const res=await fetchBackend("v1/onboarding",{headers:{Authorization:"Bearer "+token}});
   if(res.ok){
    const state=await res.json() as {completed?:boolean};
-   if(!state.completed)redirect("/onboarding");
+   if(!state.completed||!state.password_set)redirect("/onboarding");
   }
  }
  return <Workspace/>;
