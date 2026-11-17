@@ -66,21 +66,28 @@ func Run() error {
 	}
 
 	service := api.New(db.DB, tokens, logger, cfg.Env)
- // Periodic garbage collection of abandoned or invalid media, bounded and
- // resumable. Per-row SKIP LOCKED prevents duplicate work across replicas.
- go func() {
-  tick:=time.NewTicker(5*time.Minute)
-  defer tick.Stop()
-  for {
-   runCtx,cancel:=context.WithTimeout(ctx,45*time.Second)
-   count,err:=service.CleanupStaleMedia(runCtx,50)
-   cancel()
-   if err!=nil{logger.Error("media cleanup failed","error",err)
-   }else if count>0{logger.Info("stale media cleaned","count",count)}
-   select {case <-ctx.Done():return;case <-tick.C:}
-  }
- }()
- handler := service.Handler()
+	// Periodic garbage collection of abandoned or invalid media, bounded and
+	// resumable. Per-row SKIP LOCKED prevents duplicate work across replicas.
+	go func() {
+		tick := time.NewTicker(5 * time.Minute)
+		defer tick.Stop()
+		for {
+			runCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+			count, err := service.CleanupStaleMedia(runCtx, 50)
+			cancel()
+			if err != nil {
+				logger.Error("media cleanup failed", "error", err)
+			} else if count > 0 {
+				logger.Info("stale media cleaned", "count", count)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
+		}
+	}()
+	handler := service.Handler()
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second,

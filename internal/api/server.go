@@ -22,15 +22,15 @@ import (
 )
 
 type Server struct {
-	db     *pgxpool.Pool
-	tokens *auth.Manager
-	logger *slog.Logger
-	env    string
- storageHTTPClient *http.Client
+	db                *pgxpool.Pool
+	tokens            *auth.Manager
+	logger            *slog.Logger
+	env               string
+	storageHTTPClient *http.Client
 }
 
 func New(db *pgxpool.Pool, tokens *auth.Manager, logger *slog.Logger, env string) *Server {
-	return &Server{db:db,tokens:tokens,logger:logger,env:env,storageHTTPClient:&http.Client{Timeout:10*time.Second}}
+	return &Server{db: db, tokens: tokens, logger: logger, env: env, storageHTTPClient: &http.Client{Timeout: 10 * time.Second}}
 }
 
 type key string
