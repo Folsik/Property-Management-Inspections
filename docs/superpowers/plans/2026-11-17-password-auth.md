@@ -39,3 +39,9 @@
 - [ ] Describe credential migration and provider requirements.
 - [ ] Confirm all four checks green on feature HEAD.
 - [ ] PR into main and synchronize integration branch.
+
+## Implementation checkpoint
+- Backend migration 006, password set/login/change, legacy PIN safeguards implemented.
+- New Sign in / Sign up login and password onboarding implemented.
+- Existing profile and property records retained; migration does not discard old PINs.
+- Unit and PostgreSQL integration tests plus Docker registration smoke cover new password path; CI gates determine promotion to main.
