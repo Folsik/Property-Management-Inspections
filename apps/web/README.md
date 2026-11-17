@@ -36,7 +36,7 @@ Visit http://localhost:3000 . The web container talks privately to Go on `http:/
 - A production OTP delivery provider is required (Twilio credentials); local Go development can provide a dev OTP outside the web UI
 - S3/R2 credentials and CORS policy for browser direct PUT are required for media upload
 - AI/PDF worker and customer report guest links are *not implemented*; the UI truthfully communicates unavailable functionality
-- Temporary access-token expiry currently requires signing in again; refresh sessions are future work
+- Short-lived access tokens renew automatically via 30-day rotating refresh sessions in separate HttpOnly cookies. Device revocation is available in Account settings.
 
 ## Quality checks
 
@@ -78,3 +78,7 @@ Owner can invite managers and inspectors; manager can invite inspectors. The inv
 - **Security limitations**: the current local common-password blocklist is small and should be supplemented with a well-maintained breached-password dataset for production. Recovery request processing is synchronous and a timing side channel may remain despite generic responses; a durable asynchronous dispatch queue is recommended before public launch. If one verification channel is lost, assisted/manual recovery is not yet implemented.
 
 See [NIST SP 800-63B-4](https://pages.nist.gov/800-63-4/sp800-63b.html) and [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
+
+### Session renewal
+
+Next.js middleware renews protected pages near expiry; the BFF retries once on 401, rotates the refresh cookie and never exposes secrets to client JavaScript. Account settings show active device sessions. See [auth sessions](../../docs/auth-sessions.md).

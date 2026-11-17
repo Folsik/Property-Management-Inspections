@@ -60,3 +60,7 @@ For production email verification and invitation delivery configure `RESEND_API_
 - The separate `/forgot-password` flow is **not** account registration: it requires a time-limited email reset link sent only to a **verified** email and a distinct six-digit SMS code sent to the original account's **registered phone**. Neither factor alone grants a session. Expired/replayed tokens are rejected; all active JWTs become invalid upon reset.
 - In local Docker Compose, missing Resend/Twilio provider credentials permit explicitly local developer codes only on loopback. Production requires both providers, an HTTPS `PUBLIC_WEB_URL`, and edge request-rate limiting.
 - Accounts with no verified email or inaccessible email/phone require support-assisted identity verification; SMS-only password reset is explicitly prohibited.
+
+## Stage 1: mobile-ready sessions
+
+Rotating refresh tokens, replay detection, individual device revocation, Next.js session renewal and DB-backed admission limits are documented in [authentication sessions](docs/auth-sessions.md). Direct phone-based team additions have been disabled in favor of verified-email invitations.

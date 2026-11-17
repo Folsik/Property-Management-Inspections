@@ -9,3 +9,7 @@
 - Jobs table uses SKIP LOCKED and lease timestamps. AI/PDF workers are future milestones, not production functionality.
 - OTP provider integrations, iOS, Next.js, Stripe, report magic links are not included in this foundation.
 - Never port cards, ledger, transfers, KYC or bank-specific database migrations.
+
+## Stage 1 update (November 2026)
+
+The foundation's previous descriptions of Next.js and report guest links as future work are historical; both are present now. The Go API implements device-scoped rotating refresh sessions, and direct phone-based membership addition is disabled. See [auth sessions](auth-sessions.md). Media verification, offline sync and worker jobs remain planned.
