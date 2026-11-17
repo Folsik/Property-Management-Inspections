@@ -26,10 +26,11 @@ type Server struct {
 	tokens *auth.Manager
 	logger *slog.Logger
 	env    string
+ storageHTTPClient *http.Client
 }
 
 func New(db *pgxpool.Pool, tokens *auth.Manager, logger *slog.Logger, env string) *Server {
-	return &Server{db, tokens, logger, env}
+	return &Server{db:db,tokens:tokens,logger:logger,env:env,storageHTTPClient:&http.Client{Timeout:10*time.Second}}
 }
 
 type key string
@@ -92,6 +93,9 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("POST /v1/organizations/{org}/inspections", s.protect(http.HandlerFunc(s.createInspection)))
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/items", s.protect(http.HandlerFunc(s.addItem)))
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/media/presign", s.protect(http.HandlerFunc(s.presignMedia)))
+	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/media/{media}/confirm", s.protect(http.HandlerFunc(s.confirmMedia)))
+	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/media/{media}/download", s.protect(http.HandlerFunc(s.downloadMedia)))
+	m.Handle("DELETE /v1/organizations/{org}/inspections/{inspection}/media/{media}", s.protect(http.HandlerFunc(s.deleteMedia)))
 	return requestID(recoverer(s.logger)(securityHeaders(m)))
 }
 func write(w http.ResponseWriter, status int, v any) {
