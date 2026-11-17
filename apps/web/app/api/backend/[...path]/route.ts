@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from "next/server";
-import {renewSession,setAuthCookies} from "@/lib/session";
+import {clearAuthCookies,renewSession,setAuthCookies} from "@/lib/session";
 import {fetchBackend,sameOrigin} from "@/lib/server-api";
 
 // A closed API surface: no arbitrary paths, URLs, or unscoped proxy access.
@@ -46,8 +46,11 @@ async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>
  // Retry once after a 401 (expired JWT or rotated session generation).
  // Each response carries both replacement HttpOnly cookies back to the browser.
  if((!response||response.status===401)&&refresh){
-  pair=await renewSession(refresh);
-  if(pair)response=await invoke(pair.access_token);
+  const renewal=await renewSession(refresh);
+  if(renewal.status==="unavailable")return NextResponse.json({error:"Authentication temporarily unavailable"},{status:503});
+  if(renewal.status==="expired")return clearAuthCookies(NextResponse.json({error:"Session expired"},{status:401}));
+  pair=renewal.pair;
+  response=await invoke(pair.access_token);
  }
  if(!response)return NextResponse.json({error:"Unauthorized"},{status:401});
  let text=await response.text();

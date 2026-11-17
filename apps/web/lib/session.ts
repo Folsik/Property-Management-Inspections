@@ -9,7 +9,8 @@ export type AuthPair={
  refresh_expires_at:string;
  session_id:string;
 };
-const flights=new Map<string,{promise:Promise<AuthPair|null>;until:number}>();
+export type RenewalResult={status:"ok";pair:AuthPair}|{status:"expired"|"unavailable"};
+const flights=new Map<string,{promise:Promise<RenewalResult>;until:number}>();
 function validPair(value:unknown):value is AuthPair{
  if(!value||typeof value!=="object")return false;
  const v=value as Partial<AuthPair>;
@@ -35,16 +36,18 @@ export function clearAuthCookies(res:NextResponse){
  res.headers.set("Cache-Control","no-store");
  return res;
 }
-export async function renewSession(refreshToken:string):Promise<AuthPair|null>{
- if(!/^[a-zA-Z0-9_-]{43}$/.test(refreshToken))return null;
+export async function renewSession(refreshToken:string):Promise<RenewalResult>{
+ if(!/^[a-zA-Z0-9_-]{43}$/.test(refreshToken))return {status:"expired"};
  const existing=flights.get(refreshToken);
  if(existing&&existing.until>Date.now())return existing.promise;
  const promise=(async()=>{
   const res=await fetchBackend("v1/auth/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({refresh_token:refreshToken})});
-  if(!res.ok)return null;
+  if(res.status===401||res.status===403)return {status:"expired" as const};
+  if(!res.ok)return {status:"unavailable" as const};
   const data=await res.json().catch(()=>null);
-  return sessionPair(data);
- })().catch(()=>null);
+  const pair=sessionPair(data);
+  return pair?{status:"ok" as const,pair}:{status:"unavailable" as const};
+ })().catch(()=>({status:"unavailable" as const}));
  flights.set(refreshToken,{promise,until:Date.now()+2500});
  // Retain the small result for concurrent requests using the same cookie,
  // so the BFF does not mistake its own overlapping requests for token theft.

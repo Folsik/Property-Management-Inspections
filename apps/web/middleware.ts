@@ -9,14 +9,15 @@ export async function middleware(req:NextRequest){
   const response=NextResponse.redirect(new URL("/login?session=expired",req.url));
   return clearAuthCookies(response);
  }
- const pair=await renewSession(refresh);
- if(!pair){
+ const renewal=await renewSession(refresh);
+ if(renewal.status==="unavailable")return new NextResponse("Authentication service temporarily unavailable",{status:503,headers:{"Cache-Control":"no-store"}});
+ if(renewal.status!=="ok"){
   const response=NextResponse.redirect(new URL("/login?session=expired",req.url));
   return clearAuthCookies(response);
  }
  const headers=new Headers(req.headers);
- headers.set("cookie",refreshedRequestCookies(req.headers.get("cookie")||"",pair));
+ headers.set("cookie",refreshedRequestCookies(req.headers.get("cookie")||"",renewal.pair));
  const response=NextResponse.next({request:{headers}});
- return setAuthCookies(response,pair);
+ return setAuthCookies(response,renewal.pair);
 }
 export const config={matcher:["/dashboard/:path*","/onboarding/:path*","/report/:path*"]};

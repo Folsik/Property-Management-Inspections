@@ -18,9 +18,10 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
  }
  if(action==="refresh"){
   const refresh=req.cookies.get("inspectly_refresh")?.value;
-  const pair=refresh?await renewSession(refresh):null;
-  if(!pair)return clearAuthCookies(NextResponse.json({error:"Session expired"},{status:401}));
-  return setAuthCookies(NextResponse.json({ok:true}),pair);
+  const renewal=refresh?await renewSession(refresh):{status:"expired" as const};
+  if(renewal.status==="unavailable")return NextResponse.json({error:"Authentication temporarily unavailable"},{status:503});
+  if(renewal.status!=="ok")return clearAuthCookies(NextResponse.json({error:"Session expired"},{status:401}));
+  return setAuthCookies(NextResponse.json({ok:true}),renewal.pair);
  }
  const backendRoute=routes[action];
  if(!backendRoute)return NextResponse.json({error:"Not found"},{status:404});
