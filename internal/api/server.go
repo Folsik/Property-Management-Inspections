@@ -49,6 +49,8 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /v1/auth/otp/verify", s.verifyOTP)
 	m.HandleFunc("POST /v1/auth/pin/login", s.pinLogin)
 	m.HandleFunc("POST /v1/auth/password/login", s.passwordLogin)
+	m.HandleFunc("POST /v1/auth/refresh", s.refreshAccess)
+	m.HandleFunc("POST /v1/auth/refresh/logout", s.logoutRefresh)
 	m.HandleFunc("POST /v1/auth/recovery/request", s.requestPasswordRecovery)
 	m.HandleFunc("POST /v1/auth/recovery/complete", s.completePasswordRecovery)
 	m.Handle("POST /v1/auth/password", s.protect(http.HandlerFunc(s.setPassword)))
@@ -56,6 +58,8 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("POST /v1/auth/pin", s.protect(http.HandlerFunc(s.setPIN)))
 	m.Handle("POST /v1/auth/logout", s.protect(http.HandlerFunc(s.logout)))
 	m.Handle("GET /v1/me", s.protect(http.HandlerFunc(s.me)))
+	m.Handle("GET /v1/auth/sessions",s.protect(http.HandlerFunc(s.listAuthSessions)))
+	m.Handle("DELETE /v1/auth/sessions/{session}",s.protect(http.HandlerFunc(s.revokeAuthSession)))
 	m.Handle("GET /v1/onboarding", s.protect(http.HandlerFunc(s.onboardingStatus)))
 	m.Handle("POST /v1/onboarding/complete", s.protect(http.HandlerFunc(s.completeOnboarding)))
 	m.Handle("POST /v1/email/request", s.protect(http.HandlerFunc(s.requestEmailOTP)))
@@ -68,7 +72,7 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("PATCH /v1/me", s.protect(http.HandlerFunc(s.updateProfile)))
 	m.Handle("GET /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.listContacts)))
 	m.Handle("POST /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.createContact)))
-	m.Handle("POST /v1/organizations/{org}/members", s.protect(http.HandlerFunc(s.addMember)))
+	m.HandleFunc("POST /v1/organizations/{org}/members",func(w http.ResponseWriter,r *http.Request){fail(w,410,"Direct member addition is disabled; send an email invitation")})
 	m.Handle("GET /v1/organizations/{org}/invitations", s.protect(http.HandlerFunc(s.listInvitations)))
 	m.Handle("POST /v1/organizations/{org}/invitations", s.protect(http.HandlerFunc(s.inviteMember)))
 	m.Handle("DELETE /v1/organizations/{org}/invitations/{invite}", s.protect(http.HandlerFunc(s.revokeInvitation)))
@@ -148,6 +152,14 @@ func (s *Server) protect(next http.Handler) http.Handler {
 			fail(w, 401, "session expired")
 			return
 		}
+		if c.SessionID!=""{
+			var valid bool
+			err=s.db.QueryRow(r.Context(),`SELECT EXISTS(SELECT 1 FROM auth_sessions
+			WHERE id=$1 AND user_id=$2 AND auth_epoch=$3 AND generation=$4
+			AND revoked_at IS NULL AND expires_at>now())`,c.SessionID,c.Subject,c.AuthEpoch,c.SessionGeneration).Scan(&valid)
+			if err!=nil{fail(w,503,"auth unavailable");return}
+			if !valid{fail(w,401,"session revoked or rotated");return}
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principal, identity{c.Subject, c})))
 	})
 }
@@ -159,19 +171,6 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	write(w, 200, map[string]string{"status": "ok"})
-}
-func (s *Server) issue(w http.ResponseWriter, user string) {
-	var epoch int64
-	if err := s.db.QueryRow(context.Background(), `SELECT auth_epoch FROM users WHERE id=$1`, user).Scan(&epoch); err != nil {
-		fail(w, 503, "auth unavailable")
-		return
-	}
-	token, exp, err := s.tokens.IssueWithEpoch(user, epoch)
-	if err != nil {
-		fail(w, 500, "could not issue token")
-		return
-	}
-	write(w, 200, map[string]any{"access_token": token, "token_type": "Bearer", "expires_at": exp})
 }
 func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -302,7 +301,7 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	s.issue(w, user)
+	s.issue(w,r,user)
 }
 func (s *Server) setPIN(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -412,7 +411,7 @@ func (s *Server) pinLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	s.issue(w, id)
+	s.issue(w,r,id)
 }
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	c := who(r).Claims

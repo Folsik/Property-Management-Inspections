@@ -110,6 +110,14 @@ func TestPostgresSmoke(t *testing.T) {
 	call("GET", "/v1/organizations/"+org+"/properties", outsider, nil, 403)
 	call("POST", "/v1/organizations/"+org+"/members", owner, map[string]any{"phone": inspectorPhone, "role": "inspector"}, 410)
 	call("POST", "/v1/organizations/"+org+"/members", owner, map[string]any{"phone": inspectorPhone, "role": "manager"}, 410)
+	// Email invitation + verified matching email is the only authorized team join route.
+	inspectorEmail:=fmt.Sprintf("testinspector-%08d@example.test",suffix)
+	invite:=call("POST","/v1/organizations/"+org+"/invitations",owner,
+		map[string]any{"email":inspectorEmail,"role":"inspector"},201)
+	challenge:=call("POST","/v1/email/request",inspector,map[string]any{"email":inspectorEmail},202)
+	call("POST","/v1/email/verify",inspector,map[string]any{
+		"email":inspectorEmail,"code":challenge["dev_code"]},200)
+	call("POST","/v1/invitations/"+invite["token"].(string)+"/accept",inspector,map[string]any{},200)
 	call("POST", "/v1/organizations/"+org+"/members", inspector, map[string]any{"phone": outsiderPhone, "role": "manager"}, 403)
 	call("POST", "/v1/organizations/"+org+"/properties", inspector, map[string]any{"name": "Forbidden"}, 403)
 
