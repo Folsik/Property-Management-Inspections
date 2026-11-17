@@ -9,7 +9,7 @@ export type AuthPair={
  refresh_expires_at:string;
  session_id:string;
 };
-export type RenewalResult={status:"ok";pair:AuthPair}|{status:"expired"|"unavailable"};
+export type RenewalResult={status:"ok";pair:AuthPair}|{status:"expired"}|{status:"unavailable"};
 const flights=new Map<string,{promise:Promise<RenewalResult>;until:number}>();
 function validPair(value:unknown):value is AuthPair{
  if(!value||typeof value!=="object")return false;
