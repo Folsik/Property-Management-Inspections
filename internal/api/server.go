@@ -50,6 +50,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /v1/auth/pin/login", s.pinLogin)
 	m.HandleFunc("POST /v1/auth/password/login", s.passwordLogin)
 	m.Handle("POST /v1/auth/password", s.protect(http.HandlerFunc(s.setPassword)))
+	m.Handle("POST /v1/auth/password/change", s.protect(http.HandlerFunc(s.changePassword)))
 	m.Handle("POST /v1/auth/pin", s.protect(http.HandlerFunc(s.setPIN)))
 	m.Handle("POST /v1/auth/logout", s.protect(http.HandlerFunc(s.logout)))
 	m.Handle("GET /v1/me", s.protect(http.HandlerFunc(s.me)))

@@ -113,6 +113,32 @@ func (s *Server) setPassword(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, map[string]string{"status": "password_set"})
 }
 
+
+func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
+ var in struct {
+  CurrentPassword string `json:"current_password"`
+  NewPassword string `json:"new_password"`
+ }
+ if !decode(w,r,&in) {return}
+ tx,err:=s.db.Begin(r.Context());if err!=nil{fail(w,503,"unavailable");return}
+ defer tx.Rollback(r.Context())
+ var phone,hash string
+ var email *string
+ err=tx.QueryRow(r.Context(),`SELECT phone,coalesce(password_hash,''),email FROM users WHERE id=$1 FOR UPDATE`,who(r).UserID).Scan(&phone,&hash,&email)
+ if err!=nil{fail(w,503,"unavailable");return}
+ if hash==""||bcrypt.CompareHashAndPassword([]byte(hash),[]byte(in.CurrentPassword))!=nil {fail(w,401,"invalid current password");return}
+ if bcrypt.CompareHashAndPassword([]byte(hash),[]byte(in.NewPassword))==nil{fail(w,400,"choose a different password");return}
+ existingEmail:="";if email!=nil{existingEmail=*email}
+ if err:=validatePassword(in.NewPassword,phone,existingEmail);err!=nil{fail(w,400,err.Error());return}
+ nextHash,err:=bcrypt.GenerateFromPassword([]byte(in.NewPassword),bcrypt.DefaultCost)
+ if err!=nil{fail(w,503,"unavailable");return}
+ _,err=tx.Exec(r.Context(),`UPDATE users SET password_hash=$2,failed_password_attempts=0,password_locked_until=NULL,
+ updated_at=now() WHERE id=$1`,who(r).UserID,string(nextHash))
+ if err!=nil{fail(w,503,"unavailable");return}
+ if err=tx.Commit(r.Context());err!=nil{fail(w,503,"unavailable");return}
+ write(w,200,map[string]string{"status":"password_changed"})
+}
+
 func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Identifier string `json:"identifier"`
