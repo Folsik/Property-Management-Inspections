@@ -45,21 +45,21 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /healthz", s.health)
 	m.HandleFunc("GET /v1/public/reports/{token}", s.publicReport)
 	m.HandleFunc("GET /v1/invitations/{token}", s.invitationPreview)
-	m.HandleFunc("POST /v1/auth/otp/request", s.limitAuth("otp-request",60,10*time.Minute,s.requestOTP))
-	m.HandleFunc("POST /v1/auth/otp/verify", s.limitAuth("otp-verify",120,10*time.Minute,s.verifyOTP))
-	m.HandleFunc("POST /v1/auth/pin/login", s.limitAuth("legacy-pin-login",120,10*time.Minute,s.pinLogin))
-	m.HandleFunc("POST /v1/auth/password/login", s.limitAuth("password-login",150,10*time.Minute,s.passwordLogin))
-	m.HandleFunc("POST /v1/auth/refresh", s.limitAuth("refresh",300,10*time.Minute,s.refreshAccess))
+	m.HandleFunc("POST /v1/auth/otp/request", s.limitAuth("otp-request", 60, 10*time.Minute, s.requestOTP))
+	m.HandleFunc("POST /v1/auth/otp/verify", s.limitAuth("otp-verify", 120, 10*time.Minute, s.verifyOTP))
+	m.HandleFunc("POST /v1/auth/pin/login", s.limitAuth("legacy-pin-login", 120, 10*time.Minute, s.pinLogin))
+	m.HandleFunc("POST /v1/auth/password/login", s.limitAuth("password-login", 150, 10*time.Minute, s.passwordLogin))
+	m.HandleFunc("POST /v1/auth/refresh", s.limitAuth("refresh", 300, 10*time.Minute, s.refreshAccess))
 	m.HandleFunc("POST /v1/auth/refresh/logout", s.logoutRefresh)
-	m.HandleFunc("POST /v1/auth/recovery/request", s.limitAuth("recovery-request",60,10*time.Minute,s.requestPasswordRecovery))
-	m.HandleFunc("POST /v1/auth/recovery/complete", s.limitAuth("recovery-complete",100,10*time.Minute,s.completePasswordRecovery))
+	m.HandleFunc("POST /v1/auth/recovery/request", s.limitAuth("recovery-request", 60, 10*time.Minute, s.requestPasswordRecovery))
+	m.HandleFunc("POST /v1/auth/recovery/complete", s.limitAuth("recovery-complete", 100, 10*time.Minute, s.completePasswordRecovery))
 	m.Handle("POST /v1/auth/password", s.protect(http.HandlerFunc(s.setPassword)))
 	m.Handle("POST /v1/auth/password/change", s.protect(http.HandlerFunc(s.changePassword)))
 	m.Handle("POST /v1/auth/pin", s.protect(http.HandlerFunc(s.setPIN)))
 	m.Handle("POST /v1/auth/logout", s.protect(http.HandlerFunc(s.logout)))
 	m.Handle("GET /v1/me", s.protect(http.HandlerFunc(s.me)))
-	m.Handle("GET /v1/auth/sessions",s.protect(http.HandlerFunc(s.listAuthSessions)))
-	m.Handle("DELETE /v1/auth/sessions/{session}",s.protect(http.HandlerFunc(s.revokeAuthSession)))
+	m.Handle("GET /v1/auth/sessions", s.protect(http.HandlerFunc(s.listAuthSessions)))
+	m.Handle("DELETE /v1/auth/sessions/{session}", s.protect(http.HandlerFunc(s.revokeAuthSession)))
 	m.Handle("GET /v1/onboarding", s.protect(http.HandlerFunc(s.onboardingStatus)))
 	m.Handle("POST /v1/onboarding/complete", s.protect(http.HandlerFunc(s.completeOnboarding)))
 	m.Handle("POST /v1/email/request", s.protect(http.HandlerFunc(s.requestEmailOTP)))
@@ -72,7 +72,9 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("PATCH /v1/me", s.protect(http.HandlerFunc(s.updateProfile)))
 	m.Handle("GET /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.listContacts)))
 	m.Handle("POST /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.createContact)))
-	m.HandleFunc("POST /v1/organizations/{org}/members",func(w http.ResponseWriter,r *http.Request){fail(w,410,"Direct member addition is disabled; send an email invitation")})
+	m.HandleFunc("POST /v1/organizations/{org}/members", func(w http.ResponseWriter, r *http.Request) {
+		fail(w, 410, "Direct member addition is disabled; send an email invitation")
+	})
 	m.Handle("GET /v1/organizations/{org}/invitations", s.protect(http.HandlerFunc(s.listInvitations)))
 	m.Handle("POST /v1/organizations/{org}/invitations", s.protect(http.HandlerFunc(s.inviteMember)))
 	m.Handle("DELETE /v1/organizations/{org}/invitations/{invite}", s.protect(http.HandlerFunc(s.revokeInvitation)))
@@ -152,13 +154,19 @@ func (s *Server) protect(next http.Handler) http.Handler {
 			fail(w, 401, "session expired")
 			return
 		}
-		if c.SessionID!=""{
+		if c.SessionID != "" {
 			var valid bool
-			err=s.db.QueryRow(r.Context(),`SELECT EXISTS(SELECT 1 FROM auth_sessions
+			err = s.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM auth_sessions
 			WHERE id=$1 AND user_id=$2 AND auth_epoch=$3 AND generation=$4
-			AND revoked_at IS NULL AND expires_at>now())`,c.SessionID,c.Subject,c.AuthEpoch,c.SessionGeneration).Scan(&valid)
-			if err!=nil{fail(w,503,"auth unavailable");return}
-			if !valid{fail(w,401,"session revoked or rotated");return}
+			AND revoked_at IS NULL AND expires_at>now())`, c.SessionID, c.Subject, c.AuthEpoch, c.SessionGeneration).Scan(&valid)
+			if err != nil {
+				fail(w, 503, "auth unavailable")
+				return
+			}
+			if !valid {
+				fail(w, 401, "session revoked or rotated")
+				return
+			}
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principal, identity{c.Subject, c})))
 	})
@@ -301,7 +309,7 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	s.issue(w,r,user)
+	s.issue(w, r, user)
 }
 func (s *Server) setPIN(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -411,21 +419,34 @@ func (s *Server) pinLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	s.issue(w,r,id)
+	s.issue(w, r, id)
 }
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
- c:=who(r).Claims
- tx,err:=s.db.Begin(r.Context());if err!=nil{fail(w,503,"unavailable");return}
- defer tx.Rollback(r.Context())
- _,err=tx.Exec(r.Context(),`INSERT INTO revoked_tokens(jti,expires_at) VALUES($1,$2) ON CONFLICT DO NOTHING`,c.TokenID,time.Unix(c.ExpiresAt,0))
- if err!=nil{fail(w,503,"unavailable");return}
- if c.SessionID!=""{
-  _,err=tx.Exec(r.Context(),`UPDATE auth_sessions SET revoked_at=now(),revocation_reason='logout'
-  WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`,c.SessionID,c.Subject)
-  if err!=nil{fail(w,503,"unavailable");return}
- }
- if err=tx.Commit(r.Context());err!=nil{fail(w,503,"unavailable");return}
- write(w,200,map[string]string{"status":"logged_out"})
+	c := who(r).Claims
+	tx, err := s.db.Begin(r.Context())
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	_, err = tx.Exec(r.Context(), `INSERT INTO revoked_tokens(jti,expires_at) VALUES($1,$2) ON CONFLICT DO NOTHING`, c.TokenID, time.Unix(c.ExpiresAt, 0))
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if c.SessionID != "" {
+		_, err = tx.Exec(r.Context(), `UPDATE auth_sessions SET revoked_at=now(),revocation_reason='logout'
+  WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, c.SessionID, c.Subject)
+		if err != nil {
+			fail(w, 503, "unavailable")
+			return
+		}
+	}
+	if err = tx.Commit(r.Context()); err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	write(w, 200, map[string]string{"status": "logged_out"})
 }
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	var id, phone, name string
