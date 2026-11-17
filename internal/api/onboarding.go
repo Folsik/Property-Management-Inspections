@@ -19,9 +19,9 @@ func (s *Server) onboardingStatus(w http.ResponseWriter, r *http.Request) {
 	var phone, name string
 	var email *string
 	var verified, complete *time.Time
-	var pinSet bool
-	err := s.db.QueryRow(r.Context(), `SELECT phone,full_name,email,email_verified_at,onboarding_completed_at,(pin_hash IS NOT NULL)
- FROM users WHERE id=$1`, who(r).UserID).Scan(&phone, &name, &email, &verified, &complete, &pinSet)
+	var passwordSet bool
+	err := s.db.QueryRow(r.Context(), `SELECT phone,full_name,email,email_verified_at,onboarding_completed_at,(password_hash IS NOT NULL)
+ FROM users WHERE id=$1`, who(r).UserID).Scan(&phone, &name, &email, &verified, &complete, &passwordSet)
 	if err != nil {
 		fail(w, 503, "onboarding unavailable")
 		return
@@ -35,7 +35,7 @@ func (s *Server) onboardingStatus(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "onboarding unavailable")
 		return
 	}
-	write(w, 200, map[string]any{"phone": phone, "full_name": name, "email": email, "pin_set": pinSet,
+	write(w, 200, map[string]any{"phone": phone, "full_name": name, "email": email, "password_set": passwordSet,
 		"email_verified": verified != nil, "completed": complete != nil, "has_organization": hasMembership,
 		"owns_organization": ownOrg, "has_property": hasProperty})
 }
@@ -190,7 +190,7 @@ func (s *Server) verifyEmailOTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	var allowed bool
 	err := s.db.QueryRow(r.Context(), `SELECT (
- u.pin_hash IS NOT NULL AND u.email_verified_at IS NOT NULL AND length(trim(u.full_name))>0
+ u.password_hash IS NOT NULL AND u.email_verified_at IS NOT NULL AND length(trim(u.full_name))>0
  AND EXISTS(SELECT 1 FROM organization_members m WHERE m.user_id=u.id AND (
  m.role<>'owner' OR EXISTS(SELECT 1 FROM properties p WHERE p.organization_id=m.organization_id)
  ))
@@ -200,7 +200,7 @@ func (s *Server) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !allowed {
-		fail(w, 409, "complete your PIN, verified email, name, organization and first property")
+		fail(w, 409, "complete your password, verified email, name, organization and first property")
 		return
 	}
 	_, err = s.db.Exec(r.Context(), `UPDATE users SET onboarding_completed_at=COALESCE(onboarding_completed_at,now()) WHERE id=$1`, who(r).UserID)
