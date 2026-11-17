@@ -17,7 +17,7 @@ const passwordRules=[
  {label:"At least 12 characters",test:(value:string)=>value.length>=12&&new TextEncoder().encode(value).length<=72},
  {label:"An uppercase letter",test:(value:string)=>/[A-Z]/.test(value)},
  {label:"A number",test:(value:string)=>/[0-9]/.test(value)},
- {label:"A special character",test:(value:string)=>/[^\\w\\s]/.test(value)},
+ {label:"A special character",test:(value:string)=>/[^\w\s]/.test(value)},
 ];
 const milestones=[{label:"Secure your account",icon:KeyRound},{label:"Verify email",icon:Mail},{label:"Your workspace",icon:Building2},{label:"First property",icon:Home}];
 function pickStep(state:OnboardingStatus,invitation:boolean):Step{
