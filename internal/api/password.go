@@ -1,6 +1,7 @@
 package api
 
 import (
+	_ "embed"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
@@ -20,6 +21,16 @@ import (
 
 // Exact-match denylist. The user-provided password is never rejected just for
 // containing a dictionary word. Extend the dataset with breached corpus checks.
+//go:embed password_blocklist/10k-most-common.txt
+var embeddedCommonPasswords string
+
+func init() {
+  for _,line:=range strings.Split(embeddedCommonPasswords,"\n"){
+   line=strings.TrimSuffix(line,"\r")
+   if line!=""{commonPasswords[strings.ToLower(line)]=true}
+  }
+}
+
 var commonPasswords = map[string]bool{
 	"password": true, "password123": true, "password123!": true, "qwerty": true,
 	"123456789012345": true, "qwertyqwertyqwerty": true,
