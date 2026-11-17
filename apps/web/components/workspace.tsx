@@ -100,6 +100,8 @@ export function Workspace(){
  const [currentPassword,setCurrentPassword]=useState("");
  const [newPassword,setNewPassword]=useState("");
  const [confirmPassword,setConfirmPassword]=useState("");
+ const [devices,setDevices]=useState<{id:string;device_name:string;created_at:string;last_seen_at:string;expires_at:string;current:boolean}[]>([]);
+ const [devicesLoading,setDevicesLoading]=useState(false);
  const [managedReport,setManagedReport]=useState("");
  const [links,setLinks]=useState<{id:string;expires_at:string;revoked_at:string|null;created_at:string}[]>([]);
  const [shareURL,setShareURL]=useState("");
@@ -139,6 +141,22 @@ export function Workspace(){
   try{const result=await endpoints.contacts(id);setContacts(result.items);}catch(e){showError(e);}
  },[]);
  useEffect(()=>{if(section==="contacts"&&orgID&&canManage)void loadContacts(orgID);},[section,orgID,canManage,loadContacts]);
+ const loadDevices=useCallback(async()=>{
+  setDevicesLoading(true);
+  try{const list=await get<{items:typeof devices}>("v1/auth/sessions");setDevices(list.items);}
+  catch(e){showError(e);}
+  finally{setDevicesLoading(false);}
+ },[]);
+ useEffect(()=>{if(section==="settings")void loadDevices();},[section,loadDevices]);
+ async function revokeDevice(id:string,current:boolean){
+  if(!window.confirm(current?"Sign out this device?":"Revoke this device session?"))return;
+  setSaving(true);setError("");
+  try{
+   await api(`v1/auth/sessions/${id}`,{method:"DELETE"});
+   if(current){await signOut();return;}
+   await loadDevices();setNotice("Device session revoked.");
+  }catch(e){showError(e);}finally{setSaving(false);}
+ }
  const reloadInvitations=useCallback(async(id:string)=>{try{const data=await get<{items:Invitation[]}>(`v1/organizations/${id}/invitations`);setInvitations(data.items);}catch(e){showError(e);}},[]);
  useEffect(()=>{if(section==="team"&&orgID&&canManage)void reloadInvitations(orgID);},[section,orgID,canManage,reloadInvitations]);
  const reloadDetail=useCallback(async(id:string,inspection:string)=>{
@@ -256,7 +274,10 @@ export function Workspace(){
    if(newPassword!==confirmPassword)throw Error("The new passwords do not match.");
    await post("v1/auth/password/change",{current_password:currentPassword,new_password:newPassword});
    setCurrentPassword("");setNewPassword("");setConfirmPassword("");
-   setNotice("Your password was updated.");
+   // Password changes invalidate all sessions, including this one.
+   await fetch("/api/auth/logout",{method:"POST"}).catch(()=>{});
+   window.location.assign("/login?password=changed");
+   return;
   }catch(e){showError(e);}finally{setSaving(false);}
  }
  async function signOut(){
@@ -361,6 +382,19 @@ export function Workspace(){
         <p className="text-xs text-slate-500">Use at least 15 characters. Spaces and Unicode are allowed; common passwords are blocked. No symbol or uppercase rule.</p>
         <Button type="submit" disabled={saving||newPassword!==confirmPassword}>Update password</Button></form></Card>
       </div>
+      <Card className="mt-6 max-w-4xl p-6">
+       <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h2 className="font-bold">Signed-in devices</h2><p className="mt-1 text-xs text-slate-500">Review active sessions. Revoking a device immediately invalidates its access and refresh tokens.</p></div>
+        <Button variant="outline" size="sm" onClick={()=>void loadDevices()} disabled={devicesLoading}>Refresh</Button>
+       </div>
+       {devicesLoading?<div className="mt-5 text-sm text-slate-500">Loading devices…</div>:devices.length?
+        <div className="mt-5 divide-y divide-slate-100">{devices.map(device=><div key={device.id} className="flex flex-wrap items-center justify-between gap-4 py-4">
+         <div className="min-w-0"><div className="flex items-center gap-2"><p className="max-w-sm truncate text-sm font-semibold text-slate-800" title={device.device_name}>{device.device_name}</p>{device.current&&<Badge tone="blue">This device</Badge>}</div>
+         <p className="mt-1 text-xs text-slate-500">Last active {humanDate(device.last_seen_at)} · Expires {humanDate(device.expires_at)}</p></div>
+         <Button variant="outline" size="sm" disabled={saving} onClick={()=>void revokeDevice(device.id,device.current)}>{device.current?"Sign out":"Revoke session"}</Button>
+        </div>)}</div>:
+        <p className="mt-5 text-sm text-slate-500">No active device sessions found.</p>}
+      </Card>
       <Card className="mt-6 max-w-4xl p-6"><h2 className="font-bold">Current organization</h2><p className="mt-1 text-sm text-slate-500">{activeOrg?.name} · Your role: <span className="capitalize">{activeOrg?.role}</span></p><p className="mt-3 text-xs text-slate-400">Organization access controls are enforced by the API for every request.</p></Card>
      </>}
     </>}
