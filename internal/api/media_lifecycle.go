@@ -192,7 +192,7 @@ func (s *Server) CleanupStaleMedia(ctx context.Context,limit int)(int,error){
   tx,err:=s.db.Begin(ctx);if err!=nil{return cleaned,err}
   var id,key string
   err=tx.QueryRow(ctx,`SELECT id,object_key FROM media_attachments WHERE
-  (state='pending' AND created_at<now()-interval '20 minutes') OR state='rejected'
+  (state='pending' AND created_at<now()-interval '20 minutes') OR (state='rejected' AND deleted_at IS NULL)
   ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&id,&key)
   if errors.Is(err,pgx.ErrNoRows){tx.Rollback(ctx);break}
   if err!=nil{tx.Rollback(ctx);return cleaned,err}

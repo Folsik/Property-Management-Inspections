@@ -242,7 +242,7 @@ func (s *Server) listMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT id,mime_type,size_bytes,state,created_at
-		FROM media_attachments WHERE organization_id=$1 AND inspection_id=$2
+		FROM media_attachments WHERE organization_id=$1 AND inspection_id=$2 AND state<>'deleted'
 		ORDER BY created_at DESC LIMIT 200`, r.PathValue("org"), inspection)
 	if err != nil {
 		fail(w, 503, "database unavailable")

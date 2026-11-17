@@ -23,6 +23,7 @@ const allowed=[
  /^v1\/organizations\/[0-9a-f-]{36}\/shares\/[0-9a-f-]{36}$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/(items|media|media\/presign)$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/items\/[0-9a-f-]{36}$/,
+ /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/media\/[0-9a-f-]{36}(?:\/confirm|\/download)?$/,
 ];
 async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
  const {path}=await params;
