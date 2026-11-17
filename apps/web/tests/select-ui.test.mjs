@@ -8,8 +8,8 @@ const select=readFileSync(resolve("components/ui/select.tsx"),"utf8");
 const styles=readFileSync(resolve("app/globals.css"),"utf8");
 
 test("workspace never renders browser-native HTML select or option menus",()=>{
- assert.doesNotMatch(workspace,/<\s*select\b/i,"Use shared Radix Select instead of native select in workspace");
- assert.doesNotMatch(workspace,/<\s*option\b/i,"Use shared Radix SelectItem instead of native option in workspace");
+ assert.doesNotMatch(workspace,/<\s*select\b/,"Use shared Radix Select instead of native select in workspace");
+ assert.doesNotMatch(workspace,/<\s*option\b/,"Use shared Radix SelectItem instead of native option in workspace");
 });
 
 test("workspace organization switcher keeps controlled organization selection and accessible name",()=>{
