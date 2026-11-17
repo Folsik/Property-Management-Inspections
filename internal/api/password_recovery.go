@@ -98,6 +98,9 @@ func (s *Server) requestPasswordRecovery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// Invalidate previous outstanding challenges before issuing a new one.
+	_,err=tx.Exec(r.Context(),`UPDATE auth_sessions SET revoked_at=now(),revocation_reason='password_reset'
+ WHERE user_id=$1 AND revoked_at IS NULL`,user)
+ if err!=nil{fail(w,503,"unavailable");return}
 	_, err = tx.Exec(r.Context(), `UPDATE password_recoveries SET used_at=now() WHERE user_id=$1 AND used_at IS NULL`, user)
 	if err != nil {
 		fail(w, 503, "unavailable")
