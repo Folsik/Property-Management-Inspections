@@ -437,7 +437,7 @@ func (s *Server) CleanupStaleMedia(ctx context.Context, limit int) (int, error) 
 		var staging *string
 		err = tx.QueryRow(ctx, `SELECT id,object_key,staging_key,state FROM media_attachments WHERE
   (state='pending' AND created_at<now()-interval '20 minutes')
-  OR (state='rejected' AND deleted_at IS NULL)
+  OR (state='rejected' AND deleted_at IS NULL AND created_at<now()-interval '20 minutes')
   OR (staging_key IS NOT NULL AND created_at<now()-interval '20 minutes')
   ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&id, &key, &staging, &state)
 		if errors.Is(err, pgx.ErrNoRows) {
