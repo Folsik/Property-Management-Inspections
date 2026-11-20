@@ -684,7 +684,13 @@ func (s *Server) addItem(w http.ResponseWriter, r *http.Request) {
 	var id string
 	var version int64
 	var updated time.Time
-	err := s.db.QueryRow(r.Context(), "INSERT INTO inspection_items(organization_id,inspection_id,client_id,title,notes,severity) SELECT organization_id,id,$3,$4,$5,$6 FROM inspections WHERE organization_id=$1 AND id=$2 AND status IN ('draft','in_progress') AND deleted_at IS NULL ON CONFLICT (inspection_id,client_id) DO UPDATE SET title=EXCLUDED.title WHERE inspection_items.title=EXCLUDED.title AND inspection_items.notes=EXCLUDED.notes AND inspection_items.severity=EXCLUDED.severity AND inspection_items.deleted_at IS NULL RETURNING id,version,updated_at", r.PathValue("org"), r.PathValue("inspection"), in.ClientID, in.Title, in.Notes, in.Severity).Scan(&id, &version, &updated)
+	err := s.db.QueryRow(r.Context(), "INSERT INTO inspection_items(organization_id,inspection_id,client_id,title,notes,severity) SELECT organization_id,id,$3,$4,$5,$6 FROM inspections WHERE organization_id=$1 AND id=$2 AND status IN ('draft','in_progress') AND deleted_at IS NULL ON CONFLICT (inspection_id,client_id) DO NOTHING RETURNING id,version,updated_at", r.PathValue("org"), r.PathValue("inspection"), in.ClientID, in.Title, in.Notes, in.Severity).Scan(&id, &version, &updated)
+ if errors.Is(err,pgx.ErrNoRows){
+  err=s.db.QueryRow(r.Context(),`SELECT id,version,updated_at FROM inspection_items
+   WHERE organization_id=$1 AND inspection_id=$2 AND client_id=$3
+   AND title=$4 AND notes=$5 AND severity=$6 AND deleted_at IS NULL`,
+   r.PathValue("org"),r.PathValue("inspection"),in.ClientID,in.Title,in.Notes,in.Severity).Scan(&id,&version,&updated)
+ }
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 409, "inspection missing, closed or client_id conflicts")
 		return
