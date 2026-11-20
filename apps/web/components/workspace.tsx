@@ -240,12 +240,12 @@ export function Workspace(){
  }
  async function setInspectionStatus(status:InspectionStatus){
   if(!selected)return;setSaving(true);setError("");
-  try{await patch(`v1/organizations/${orgID}/inspections/${selectedID}`,{status});await Promise.all([reloadDetail(orgID,selectedID),reloadWorkspace(orgID)]);setNotice("Inspection updated.");}
+  try{await patch(`v1/organizations/${orgID}/inspections/${selectedID}`,{status,version:selected?.version});await Promise.all([reloadDetail(orgID,selectedID),reloadWorkspace(orgID)]);setNotice("Inspection updated.");}
   catch(e){showError(e);}finally{setSaving(false);}
  }
  async function setItemStatus(itemID:string,status:ItemStatus){
   setSaving(true);setError("");
-  try{await patch(`v1/organizations/${orgID}/inspections/${selectedID}/items/${itemID}`,{status});await Promise.all([reloadDetail(orgID,selectedID),reloadWorkspace(orgID)]);}
+  try{await patch(`v1/organizations/${orgID}/inspections/${selectedID}/items/${itemID}`,{status,version:items.find(item=>item.id===itemID)?.version});await Promise.all([reloadDetail(orgID,selectedID),reloadWorkspace(orgID)]);}
   catch(e){showError(e);}finally{setSaving(false);}
  }
  async function uploadFile(event:React.ChangeEvent<HTMLInputElement>){

@@ -92,6 +92,9 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/media", s.protect(http.HandlerFunc(s.listMedia)))
 	m.Handle("POST /v1/organizations/{org}/inspections", s.protect(http.HandlerFunc(s.createInspection)))
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/items", s.protect(http.HandlerFunc(s.addItem)))
+	m.Handle("DELETE /v1/organizations/{org}/inspections/{inspection}/items/{item}", s.protect(http.HandlerFunc(s.deleteItem)))
+	m.Handle("GET /v1/organizations/{org}/sync/pull", s.protect(http.HandlerFunc(s.pullSync)))
+	m.Handle("POST /v1/organizations/{org}/sync/push", s.protect(http.HandlerFunc(s.pushSync)))
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/media/presign", s.protect(http.HandlerFunc(s.presignMedia)))
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/media/{media}/confirm", s.protect(http.HandlerFunc(s.confirmMedia)))
 	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/media/{media}/download", s.protect(http.HandlerFunc(s.downloadMedia)))
@@ -566,39 +569,57 @@ func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 		addr = []byte("{}")
 	}
 	var id string
-	err := s.db.QueryRow(r.Context(), "INSERT INTO properties(organization_id,name,address) VALUES($1,$2,$3) RETURNING id", r.PathValue("org"), in.Name, addr).Scan(&id)
+	var version int64
+	var updated time.Time
+	err := s.db.QueryRow(r.Context(), "INSERT INTO properties(organization_id,name,address) VALUES($1,$2,$3) RETURNING id,version,updated_at", r.PathValue("org"), in.Name, addr).Scan(&id, &version, &updated)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
 	}
-	write(w, 201, map[string]any{"id": id, "name": in.Name, "address": in.Address})
+	write(w, 201, map[string]any{"id": id, "name": in.Name, "address": in.Address, "version": version, "updated_at": updated})
 }
 func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.role(r, "owner", "manager", "inspector"); !ok {
 		fail(w, 403, "forbidden")
 		return
 	}
-	rows, err := s.db.Query(r.Context(), "SELECT id,name,address FROM properties WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 100", r.PathValue("org"))
+	limit, created, cursorID, err := pageOptions(r, "properties", 100, 200)
+	if err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
+	rows, err := s.db.Query(r.Context(), `SELECT id,name,address,version,updated_at,created_at FROM properties
+ WHERE organization_id=$1 AND deleted_at IS NULL AND (created_at,id)<($2,$3::uuid)
+ ORDER BY created_at DESC,id DESC LIMIT $4`, r.PathValue("org"), created, cursorID, limit+1)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
 	}
 	defer rows.Close()
-	out := []map[string]any{}
+	out := make([]map[string]any, 0)
+	next := ""
+	more := false
 	for rows.Next() {
 		var id, name string
-		var address []byte
-		if rows.Scan(&id, &name, &address) != nil {
+		var addr []byte
+		var version int64
+		var updated, createdAt time.Time
+		if err = rows.Scan(&id, &name, &addr, &version, &updated, &createdAt); err != nil {
 			fail(w, 503, "unavailable")
 			return
 		}
-		out = append(out, map[string]any{"id": id, "name": name, "address": json.RawMessage(address)})
+		if len(out) == limit {
+			more = true
+			break
+		}
+		out = append(out, map[string]any{"id": id, "name": name, "address": json.RawMessage(addr), "version": version, "updated_at": updated})
+		next = encodeSeekCursor(r.PathValue("org"), "properties", createdAt, id)
 	}
 	if rows.Err() != nil {
 		fail(w, 503, "unavailable")
 		return
 	}
-	write(w, 200, map[string]any{"items": out})
+	write(w, 200, map[string]any{"items": out, "next_cursor": next, "has_more": more})
 }
 func (s *Server) createInspection(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.role(r, "owner", "manager", "inspector"); !ok {
@@ -617,7 +638,9 @@ func (s *Server) createInspection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id string
-	err := s.db.QueryRow(r.Context(), "INSERT INTO inspections(organization_id,property_id,inspection_type,created_by) SELECT organization_id,id,$3,$4 FROM properties WHERE organization_id=$1 AND id=$2 RETURNING id", r.PathValue("org"), in.PropertyID, in.Type, who(r).UserID).Scan(&id)
+	var version int64
+	var updated time.Time
+	err := s.db.QueryRow(r.Context(), "INSERT INTO inspections(organization_id,property_id,inspection_type,created_by) SELECT organization_id,id,$3,$4 FROM properties WHERE organization_id=$1 AND id=$2 AND deleted_at IS NULL RETURNING id,version,updated_at", r.PathValue("org"), in.PropertyID, in.Type, who(r).UserID).Scan(&id, &version, &updated)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 404, "property not found")
 		return
@@ -626,7 +649,7 @@ func (s *Server) createInspection(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	write(w, 201, map[string]string{"id": id, "property_id": in.PropertyID, "type": in.Type, "status": "draft"})
+	write(w, 201, map[string]any{"id": id, "property_id": in.PropertyID, "type": in.Type, "status": "draft", "version": version, "updated_at": updated})
 }
 func (s *Server) addItem(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.role(r, "owner", "manager", "inspector"); !ok {
@@ -659,7 +682,15 @@ func (s *Server) addItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id string
-	err := s.db.QueryRow(r.Context(), "INSERT INTO inspection_items(organization_id,inspection_id,client_id,title,notes,severity) SELECT organization_id,id,$3,$4,$5,$6 FROM inspections WHERE organization_id=$1 AND id=$2 AND status IN ('draft','in_progress') ON CONFLICT (inspection_id,client_id) DO UPDATE SET title=EXCLUDED.title WHERE inspection_items.title=EXCLUDED.title RETURNING id", r.PathValue("org"), r.PathValue("inspection"), in.ClientID, in.Title, in.Notes, in.Severity).Scan(&id)
+	var version int64
+	var updated time.Time
+	err := s.db.QueryRow(r.Context(), "INSERT INTO inspection_items(organization_id,inspection_id,client_id,title,notes,severity) SELECT organization_id,id,$3,$4,$5,$6 FROM inspections WHERE organization_id=$1 AND id=$2 AND status IN ('draft','in_progress') AND deleted_at IS NULL ON CONFLICT (inspection_id,client_id) DO NOTHING RETURNING id,version,updated_at", r.PathValue("org"), r.PathValue("inspection"), in.ClientID, in.Title, in.Notes, in.Severity).Scan(&id, &version, &updated)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = s.db.QueryRow(r.Context(), `SELECT id,version,updated_at FROM inspection_items
+   WHERE organization_id=$1 AND inspection_id=$2 AND client_id=$3
+   AND title=$4 AND notes=$5 AND severity=$6 AND deleted_at IS NULL`,
+			r.PathValue("org"), r.PathValue("inspection"), in.ClientID, in.Title, in.Notes, in.Severity).Scan(&id, &version, &updated)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 409, "inspection missing, closed or client_id conflicts")
 		return
@@ -668,5 +699,5 @@ func (s *Server) addItem(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	write(w, 201, map[string]string{"id": id, "client_id": in.ClientID, "title": in.Title, "severity": in.Severity})
+	write(w, 201, map[string]any{"id": id, "client_id": in.ClientID, "title": in.Title, "severity": in.Severity, "version": version, "updated_at": updated})
 }

@@ -219,6 +219,23 @@ func TestMediaLifecycleAndTenantIsolation(t *testing.T) {
 	}
 	request("POST", base+"/"+id+"/confirm", ownerJWT, "{}", 200)
 	request("POST", base+"/"+id+"/confirm", ownerJWT, "{}", 200)
+	var recordedVersion int64
+	if err = database.DB.QueryRow(ctx, `SELECT version FROM media_attachments WHERE id=$1`, id).Scan(&recordedVersion); err != nil {
+		t.Fatal(err)
+	}
+	if recordedVersion < 2 {
+		t.Fatalf("media version not advanced on confirm: %d", recordedVersion)
+	}
+	var safePayload []byte
+	err = database.DB.QueryRow(ctx, `SELECT payload FROM sync_changes WHERE organization_id=$1 AND entity_id=$2
+ ORDER BY seq DESC LIMIT 1`, org, id).Scan(&safePayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(safePayload, []byte("object_key")) || bytes.Contains(safePayload, []byte("staging_key")) {
+		t.Fatalf("private storage keys disclosed by sync change: %s", safePayload)
+	}
+
 	read := request("GET", base+"/"+id+"/download", ownerJWT, "", 200)
 	if read["download_url"] == nil {
 		t.Fatal("missing signed download")
@@ -267,6 +284,15 @@ func TestMediaLifecycleAndTenantIsolation(t *testing.T) {
 	request("GET", "/v1/organizations/"+otherOrg+"/inspections/"+inspection+"/media/"+id+"/download", ownerJWT, "", 404)
 	request("DELETE", base+"/"+id, otherJWT, "", 403)
 	request("DELETE", base+"/"+id, ownerJWT, "", 200)
+	var deleted bool
+	if err = database.DB.QueryRow(ctx, `SELECT deleted FROM sync_changes WHERE organization_id=$1 AND entity_id=$2
+ ORDER BY seq DESC LIMIT 1`, org, id).Scan(&deleted); err != nil {
+		t.Fatal(err)
+	}
+	if !deleted {
+		t.Fatal("media deletion did not emit a tombstone")
+	}
+
 	request("GET", base+"/"+id+"/download", ownerJWT, "", 404)
 
 	// Deliberately uploaded fake JPEG: correct metadata must not bypass signature verification.

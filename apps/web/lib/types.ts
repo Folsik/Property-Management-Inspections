@@ -1,18 +1,20 @@
 export type Role="owner"|"manager"|"inspector";
 export type Organization={id:string;name:string;role:Role;kind?:"individual"|"company";country?:string};
-export type Property={id:string;name:string;address:Record<string,string>};
+export type Property={id:string;name:string;address:Record<string,string>;version:number;updated_at:string};
 export type InspectionType="move_in"|"move_out"|"turnover"|"maintenance";
 export type InspectionStatus="draft"|"in_progress"|"completed"|"cancelled";
-export type Inspection={id:string;property_id:string;property_name:string;type:InspectionType;status:InspectionStatus;created_at:string;open_items:number;total_items:number};
+export type Inspection={id:string;property_id:string;property_name:string;type:InspectionType;status:InspectionStatus;created_at:string;updated_at:string;version:number;open_items:number;total_items:number};
 export type ItemStatus="open"|"in_progress"|"resolved";
-export type InspectionItem={id:string;client_id:string;title:string;notes:string;severity:"low"|"normal"|"high"|"critical";status:ItemStatus;created_at:string};
+export type InspectionItem={id:string;client_id:string;title:string;notes:string;severity:"low"|"normal"|"high"|"critical";status:ItemStatus;created_at:string;updated_at:string;version:number};
 export type Member={id:string;phone:string;full_name:string;role:Role;joined_at:string};
-export type Media={id:string;mime_type:string;size_bytes:number;state:"pending"|"uploaded"|"rejected"|"deleted";created_at:string};
+export type Media={id:string;mime_type:string;size_bytes:number;state:"pending"|"uploaded"|"rejected"|"deleted";created_at:string;updated_at:string;version:number};
 export type Job={id:string;kind:string;state:string;attempts:number;created_at:string};
 export type Profile={id:string;phone:string;full_name:string};
 export type OnboardingStatus={phone:string;full_name:string;email:string|null;password_set:boolean;email_verified:boolean;completed:boolean;has_organization:boolean;owns_organization:boolean;has_property:boolean};
 export type Invitation={id:string;email:string;role:"manager"|"inspector";created_at:string;expires_at:string;revoked_at:string|null;accepted_at:string|null};
-export type Collection<T>={items:T[]};
+export type Collection<T>={items:T[];next_cursor?:string;has_more?:boolean};
+export type SyncChange={seq:number;entity:"property"|"inspection"|"inspection_item"|"media_attachment";id:string;version:number;deleted:boolean;data:Record<string,unknown>;updated_at:string};
+export type SyncPull={changes:SyncChange[];next_cursor:string;has_more:boolean};
 export const typeNames:Record<InspectionType,string>={move_in:"Move-in",move_out:"Move-out",turnover:"Turnover",maintenance:"Maintenance"};
 export const statusNames:Record<InspectionStatus,string>={draft:"Draft",in_progress:"In progress",completed:"Completed",cancelled:"Cancelled"};
 

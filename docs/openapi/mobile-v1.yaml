@@ -1,0 +1,129 @@
+openapi: 3.1.0
+info:
+  title: Inspectly Mobile Sync API
+  version: 1.0.0-stage3
+  description: Stage 3 online-first mobile sync contract. All paths require Bearer auth and organization membership.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Org:
+      name: org
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Inspection:
+      name: inspection
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 500}
+  schemas:
+    Change:
+      type: object
+      required: [seq, entity, id, version, deleted, data, updated_at]
+      properties:
+        seq: {type: integer, format: int64}
+        entity: {type: string, enum: [property, inspection, inspection_item, media_attachment]}
+        id: {type: string, format: uuid}
+        version: {type: integer, format: int64}
+        deleted: {type: boolean}
+        data: {type: object, additionalProperties: true}
+        updated_at: {type: string, format: date-time}
+    Pull:
+      type: object
+      required: [changes, next_cursor, has_more]
+      properties:
+        changes: {type: array, items: {$ref: '#/components/schemas/Change'}}
+        next_cursor: {type: string}
+        has_more: {type: boolean}
+    Mutation:
+      type: object
+      required: [mutation_id, entity, action, inspection_id]
+      properties:
+        mutation_id: {type: string, format: uuid}
+        entity: {type: string, enum: [inspection_item]}
+        action: {type: string, enum: [create, update, delete]}
+        inspection_id: {type: string, format: uuid}
+        id: {type: string, format: uuid}
+        client_id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
+        title: {type: string, maxLength: 500}
+        notes: {type: string}
+        severity: {type: string, enum: [low, normal, high, critical]}
+        status: {type: string, enum: [open, in_progress, resolved]}
+    MutationResult:
+      type: object
+      required: [mutation_id, action, entity, status]
+      properties:
+        mutation_id: {type: string, format: uuid}
+        action: {type: string}
+        entity: {type: string}
+        status: {type: integer, enum: [200, 201, 400, 404, 409]}
+        id: {type: string, format: uuid}
+        version: {type: integer, format: int64}
+        current: {type: object, additionalProperties: true}
+        error: {type: string}
+paths:
+  /v1/organizations/{org}/sync/pull:
+    get:
+      summary: Pull ordered, tenant-scoped durable changes
+      parameters:
+        - {$ref: '#/components/parameters/Org'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200':
+          description: Changes and next cursor
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pull'}
+        '400': {description: Invalid cursor}
+        '403': {description: Tenant access denied}
+  /v1/organizations/{org}/sync/push:
+    post:
+      summary: Apply 1 to 50 idempotent inspection-item mutations
+      parameters:
+        - {$ref: '#/components/parameters/Org'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mutations]
+              properties:
+                mutations:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {$ref: '#/components/schemas/Mutation'}
+      responses:
+        '200':
+          description: Independent per-mutation outcomes; inspect every result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items: {$ref: '#/components/schemas/MutationResult'}
+        '409': {description: Mutation ID reused with different content}
+        '403': {description: Tenant access denied}

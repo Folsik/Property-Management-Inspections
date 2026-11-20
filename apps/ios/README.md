@@ -9,3 +9,7 @@ The Go API now implements a [refresh-token rotation protocol](../../docs/auth-se
 ## Planned media upload contract
 
 Follow the documented [presign → background PUT → confirm](../../docs/media-lifecycle.md) sequence. iOS must maintain a retryable queue of local asset IDs while offline; signed tickets expire after five minutes and must be renewed on retry. Only confirmed uploads are considered complete; verified downloads use short-lived signed GET URLs. SwiftUI upload screens are not yet implemented.
+
+## Mobile data/sync integration (Stage 3)
+
+Use the [v1 mobile sync contract](../../docs/api-v1-mobile.md) for cursor-based local database replication, queued idempotent item mutations and conflict resolution. Apply each pull page and persist its next cursor in one SwiftData/SQLite transaction. Client-generated item IDs and stable mutation UUIDs survive restarts; do not silently overwrite server changes. `main` does not include Stage 3 until approval.

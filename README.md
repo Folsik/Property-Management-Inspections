@@ -68,3 +68,7 @@ Rotating refresh tokens, replay detection, individual device revocation, Next.js
 ## Stage 2 — Media Service (integration branch)
 
 Media presigning, upload confirmation with S3 HEAD and ranged content signature checks, immutable verified objects, tenant-scoped signed reads, deletion and background staging cleanup are described in [media lifecycle](docs/media-lifecycle.md). Requires private S3/R2 configuration. These changes are staged on feat/bootstrap-foundation and are not in main until manually approved.
+
+## Stage 3 — mobile API contract (integration branch only)
+
+`feat/bootstrap-foundation` contains the additive v10 mobile sync schema, versioned records, tenant-keyset pagination, durable change/tombstone feed, idempotent offline inspection-item mutations, and 409 stale-version conflict handling. See [the API contract](docs/api-v1-mobile.md) and [OpenAPI](docs/openapi/mobile-v1.yaml). This stage must be reviewed and manually approved before any merge into main. Stage 2 Media Service remains in main.
