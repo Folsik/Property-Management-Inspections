@@ -141,34 +141,40 @@ func TestMobileSyncConcurrencyAndIsolation(t *testing.T) {
 	}
 	sameID := map[string]any{"mutations": []any{map[string]any{"mutation_id": mutation, "action": "create", "entity": "inspection_item", "inspection_id": inspection, "client_id": newClient, "title": "Tampered payload"}}}
 	call("POST", base+"/sync/push", token, sameID, 409)
- // Update via offline push; a second stale mutation must report 409 and a
- // server snapshot, rather than overwrite another inspector's changes.
- entry:=pushed["results"].([]any)[0].(map[string]any)
- newID:=entry["id"].(string)
- updateKey:="00000000-aaaa-4bbb-8ccc-000000000004"
- update:=map[string]any{"mutations":[]any{map[string]any{
-  "mutation_id":updateKey,"action":"update","entity":"inspection_item",
-  "inspection_id":inspection,"id":newID,"version":1,"status":"in_progress",
- }}}
- updated:=call("POST",base+"/sync/push",token,update,200)
- if updated["results"].([]any)[0].(map[string]any)["status"]!=float64(200){t.Fatalf("sync update rejected: %v",updated)}
- staleKey:="00000000-aaaa-4bbb-8ccc-000000000005"
- stalePush:=map[string]any{"mutations":[]any{map[string]any{
-  "mutation_id":staleKey,"action":"update","entity":"inspection_item",
-  "inspection_id":inspection,"id":newID,"version":1,"status":"resolved",
- }}}
- rejected:=call("POST",base+"/sync/push",token,stalePush,200)
- conflict:=rejected["results"].([]any)[0].(map[string]any)
- if conflict["status"]!=float64(409)||conflict["current"]==nil{t.Fatalf("missing conflict snapshot: %v",rejected)}
- // Client explicitly resolves by using the current server version.
- resolved:=map[string]any{"mutations":[]any{map[string]any{
-  "mutation_id":"00000000-aaaa-4bbb-8ccc-000000000006","action":"update",
-  "entity":"inspection_item","inspection_id":inspection,"id":newID,
-  "version":2,"status":"resolved",
- }}}
- synced:=call("POST",base+"/sync/push",token,resolved,200)
- if synced["results"].([]any)[0].(map[string]any)["status"]!=float64(200){t.Fatalf("resolution failed: %v",synced)}
- 	call("POST", base+"/sync/push", otherToken, request, 403)
+	// Update via offline push; a second stale mutation must report 409 and a
+	// server snapshot, rather than overwrite another inspector's changes.
+	entry := pushed["results"].([]any)[0].(map[string]any)
+	newID := entry["id"].(string)
+	updateKey := "00000000-aaaa-4bbb-8ccc-000000000004"
+	update := map[string]any{"mutations": []any{map[string]any{
+		"mutation_id": updateKey, "action": "update", "entity": "inspection_item",
+		"inspection_id": inspection, "id": newID, "version": 1, "status": "in_progress",
+	}}}
+	updated := call("POST", base+"/sync/push", token, update, 200)
+	if updated["results"].([]any)[0].(map[string]any)["status"] != float64(200) {
+		t.Fatalf("sync update rejected: %v", updated)
+	}
+	staleKey := "00000000-aaaa-4bbb-8ccc-000000000005"
+	stalePush := map[string]any{"mutations": []any{map[string]any{
+		"mutation_id": staleKey, "action": "update", "entity": "inspection_item",
+		"inspection_id": inspection, "id": newID, "version": 1, "status": "resolved",
+	}}}
+	rejected := call("POST", base+"/sync/push", token, stalePush, 200)
+	conflict := rejected["results"].([]any)[0].(map[string]any)
+	if conflict["status"] != float64(409) || conflict["current"] == nil {
+		t.Fatalf("missing conflict snapshot: %v", rejected)
+	}
+	// Client explicitly resolves by using the current server version.
+	resolved := map[string]any{"mutations": []any{map[string]any{
+		"mutation_id": "00000000-aaaa-4bbb-8ccc-000000000006", "action": "update",
+		"entity": "inspection_item", "inspection_id": inspection, "id": newID,
+		"version": 2, "status": "resolved",
+	}}}
+	synced := call("POST", base+"/sync/push", token, resolved, 200)
+	if synced["results"].([]any)[0].(map[string]any)["status"] != float64(200) {
+		t.Fatalf("resolution failed: %v", synced)
+	}
+	call("POST", base+"/sync/push", otherToken, request, 403)
 	// Cursor seek pagination for large lists must not produce duplicate rows.
 	page := call("GET", base+"/properties?limit=1", token, nil, 200)
 	if page["next_cursor"] == nil {
