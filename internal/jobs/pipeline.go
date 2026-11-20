@@ -138,12 +138,12 @@ func (p *Pipeline) GeneratePDF(ctx context.Context, j Job) (json.RawMessage, err
 	if err != nil {
 		return nil, err
 	}
-	var propertyName, transcript string
-	err = p.DB.QueryRow(ctx, `SELECT p.name,t.text FROM inspection_transcripts t
+	var propertyName string
+	err = p.DB.QueryRow(ctx, `SELECT p.name FROM inspection_transcripts t
  JOIN inspections i ON i.organization_id=t.organization_id AND i.id=t.inspection_id
  JOIN properties p ON p.organization_id=i.organization_id AND p.id=i.property_id
  WHERE t.organization_id=$1 AND t.inspection_id=$2 AND t.media_id=$3`,
-		j.OrganizationID, t.InspectionID, t.MediaID).Scan(&propertyName, &transcript)
+		j.OrganizationID, t.InspectionID, t.MediaID).Scan(&propertyName)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,6 @@ func (p *Pipeline) GeneratePDF(ctx context.Context, j Job) (json.RawMessage, err
 	if len(extracted) == 0 {
 		appendLine("No extracted notes")
 	}
-	_ = transcript // full source transcript remains available in inspection_transcripts
 	pdf := simplePDF(lines)
 	_, err = p.DB.Exec(ctx, `INSERT INTO inspection_generated_reports(organization_id,inspection_id,media_id,content)
  VALUES($1,$2,$3,$4) ON CONFLICT (organization_id,inspection_id,media_id)
