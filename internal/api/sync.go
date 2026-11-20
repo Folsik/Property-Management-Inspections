@@ -112,7 +112,7 @@ type syncMutation struct {
 	ClientID     string `json:"client_id"`
 	Version      *int64 `json:"version"`
 	Title        string `json:"title"`
-	Notes        string `json:"notes"`
+	Notes        *string `json:"notes"`
 	Severity     string `json:"severity"`
 	Status       string `json:"status"`
 }
@@ -145,7 +145,9 @@ func (s *Server) pushSync(w http.ResponseWriter, r *http.Request) {
 		}
 		if m.Action == "create" {
 			m.Title = strings.TrimSpace(m.Title)
-			if len(m.Title) < 1 || len(m.Title) > 500 || len(m.Notes) > 10000 {
+			noteLength:=0
+   if m.Notes!=nil{noteLength=len(*m.Notes)}
+   if len(m.Title) < 1 || len(m.Title) > 500 || noteLength > 10000 {
 				fail(w, 400, "invalid item")
 				return
 			}
@@ -232,6 +234,8 @@ func applySyncItem(r *http.Request, tx pgx.Tx, org string, m syncMutation) (map[
 	ctx := r.Context()
 	result := map[string]any{"mutation_id": m.MutationID, "entity": m.Entity, "action": m.Action}
 	if m.Action == "create" {
+        notes:=""
+        if m.Notes!=nil{notes=*m.Notes}
 		severity := m.Severity
 		if severity == "" {
 			severity = "normal"
@@ -242,7 +246,7 @@ func applySyncItem(r *http.Request, tx pgx.Tx, org string, m syncMutation) (map[
    SELECT organization_id,id,$3,$4,$5,$6 FROM inspections
    WHERE organization_id=$1 AND id=$2 AND deleted_at IS NULL AND status IN ('draft','in_progress')
    ON CONFLICT (inspection_id,client_id) DO NOTHING RETURNING id,version`,
-			org, m.InspectionID, m.ClientID, m.Title, m.Notes, severity).Scan(&id, &version)
+			org, m.InspectionID, m.ClientID, m.Title, notes, severity).Scan(&id, &version)
 		if errors.Is(err, pgx.ErrNoRows) {
 			var priorTitle, priorNotes, priorSeverity string
 			err = tx.QueryRow(ctx, `SELECT id,version,title,notes,severity FROM inspection_items
@@ -256,7 +260,7 @@ func applySyncItem(r *http.Request, tx pgx.Tx, org string, m syncMutation) (map[
 				}
 				return nil, err
 			}
-			if priorTitle != m.Title || priorNotes != m.Notes || priorSeverity != severity {
+			if priorTitle != m.Title || priorNotes != notes || priorSeverity != severity {
 				result["status"] = 409
 				result["error"] = "client_id already belongs to different item"
 				return result, nil
@@ -273,14 +277,14 @@ func applySyncItem(r *http.Request, tx pgx.Tx, org string, m syncMutation) (map[
 	var version int64
 	var current []byte
 	if m.Action == "update" {
-		if m.Status == "" && m.Title == "" && m.Notes == "" && m.Severity == "" {
+		if m.Status == "" && m.Title == "" && m.Notes == nil && m.Severity == "" {
 			result["status"] = 400
 			result["error"] = "nothing to update"
 			return result, nil
 		}
 		err := tx.QueryRow(ctx, `UPDATE inspection_items SET
    title=CASE WHEN $5<>'' THEN $5 ELSE title END,
-   notes=CASE WHEN $6<>'' THEN $6 ELSE notes END,
+   notes=COALESCE($6::text,notes),
    severity=CASE WHEN $7<>'' THEN $7 ELSE severity END,
    status=CASE WHEN $8<>'' THEN $8 ELSE status END
    WHERE organization_id=$1 AND inspection_id=$2 AND id=$3 AND version=$4 AND deleted_at IS NULL
