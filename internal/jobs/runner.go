@@ -63,7 +63,7 @@ func (r *Runner) Claim(ctx context.Context) (*Job, error) {
  UPDATE jobs SET state='running',attempts=attempts+1,lease_token=gen_random_uuid(),
  locked_until=now()+($1::double precision * interval '1 second'),updated_at=now()
  WHERE id=(SELECT id FROM jobs WHERE
-   (state='pending' AND run_after<=now()) OR (state='running' AND locked_until<now())
+   (state='pending' AND run_after<=now() AND attempts<max_attempts) OR (state='running' AND locked_until<now() AND attempts<max_attempts)
  ORDER BY run_after,created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
  RETURNING id,organization_id,kind,payload,attempts,max_attempts,lease_token
  `, r.Lease.Seconds()).Scan(&j.ID, &j.OrganizationID, &j.Kind, &j.Payload, &j.Attempts, &j.MaxAttempts, &j.LeaseToken)
@@ -140,7 +140,33 @@ func (r *Runner) Finish(ctx context.Context, j Job, result json.RawMessage, jobE
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	if jobErr==nil {
+  next:=""
+  if j.Kind=="transcribe"{next="extract"}
+  if j.Kind=="extract"{next="generate_pdf"}
+  if next!="" {
+   _,err=tx.Exec(ctx,`INSERT INTO jobs(organization_id,kind,payload,idempotency_key)
+    VALUES($1,$2,$3,$4)
+    ON CONFLICT (organization_id,kind,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+    j.OrganizationID,next,string(j.Payload),j.ID)
+   if err!=nil{return err}
+  }
+ }
+ return tx.Commit(ctx)
+}
+// ReapExhausted transitions crashed tasks with no retry budget to dead letters.
+func (r *Runner) ReapExhausted(ctx context.Context) error {
+ _,err:=r.DB.Exec(ctx,`
+ WITH exhausted AS (
+ UPDATE jobs SET state='failed',lease_token=NULL,locked_until=NULL,
+ last_error='lease expired after maximum attempts',finished_at=now(),updated_at=now()
+ WHERE state='running' AND locked_until<now() AND attempts>=max_attempts
+ RETURNING id,organization_id,attempts
+ )
+ INSERT INTO job_events(job_id,organization_id,event,attempt,detail)
+ SELECT id,organization_id,'dead_lettered',attempts,'lease expired after maximum attempts' FROM exhausted
+ `)
+ return err
 }
 func (r *Runner) ProcessOne(ctx context.Context) (bool, error) {
 	j, err := r.Claim(ctx)
