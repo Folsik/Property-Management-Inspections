@@ -36,19 +36,25 @@ BEGIN
 END $$;
 CREATE FUNCTION sync_emit_change() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE category text;
+DECLARE tombstone boolean;
+DECLARE body jsonb;
 BEGIN
  category:=CASE TG_TABLE_NAME WHEN 'properties' THEN 'property'
  WHEN 'inspections' THEN 'inspection'
  WHEN 'inspection_items' THEN 'inspection_item'
  WHEN 'media_attachments' THEN 'media_attachment' END;
- INSERT INTO sync_changes(organization_id,entity_type,entity_id,version,deleted,payload,updated_at)
- VALUES(NEW.organization_id,category,NEW.id,NEW.version,CASE WHEN TG_TABLE_NAME='media_attachments' THEN NEW.state='deleted' ELSE NEW.deleted_at IS NOT NULL END,
- CASE WHEN TG_TABLE_NAME='media_attachments' THEN
-   jsonb_build_object('id',NEW.id,'inspection_id',NEW.inspection_id,
+ IF TG_TABLE_NAME='media_attachments' THEN
+  tombstone:=NEW.state='deleted';
+  body:=jsonb_build_object('id',NEW.id,'inspection_id',NEW.inspection_id,
    'item_id',NEW.item_id,'mime_type',NEW.mime_type,'size_bytes',NEW.size_bytes,
    'state',NEW.state,'created_at',NEW.created_at,
-   'updated_at',NEW.updated_at,'version',NEW.version)
-  ELSE to_jsonb(NEW) END,NEW.updated_at);
+   'updated_at',NEW.updated_at,'version',NEW.version);
+ ELSE
+  tombstone:=NEW.deleted_at IS NOT NULL;
+  body:=to_jsonb(NEW);
+ END IF;
+ INSERT INTO sync_changes(organization_id,entity_type,entity_id,version,deleted,payload,updated_at)
+ VALUES(NEW.organization_id,category,NEW.id,NEW.version,tombstone,body,NEW.updated_at);
  RETURN NULL;
 END $$;
 CREATE TRIGGER properties_version BEFORE INSERT OR UPDATE ON properties
