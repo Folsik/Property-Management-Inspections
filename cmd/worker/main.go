@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
-	"net/url"
 	"strings"
 	"syscall"
 
