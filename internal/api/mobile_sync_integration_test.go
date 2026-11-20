@@ -200,8 +200,30 @@ func TestMobileSyncConcurrencyAndIsolation(t *testing.T) {
 
 	call("POST", base+"/sync/push", otherToken, request, 403)
 	// Cursor seek pagination for large lists must not produce duplicate rows.
-	page := call("GET", base+"/properties?limit=1", token, nil, 200)
+	var secondProperty string
+ if err=db.DB.QueryRow(ctx,`INSERT INTO properties(organization_id,name) VALUES($1,'Second property') RETURNING id`,org).Scan(&secondProperty);err!=nil{t.Fatal(err)}
+ page := call("GET", base+"/properties?limit=1", token, nil, 200)
 	if page["next_cursor"] == nil {
 		t.Fatalf("missing seek cursor: %v", page)
 	}
+ if page["has_more"]!=true{t.Fatalf("expected second page: %v",page)}
+ firstID:=page["items"].([]any)[0].(map[string]any)["id"]
+ follow:=call("GET",base+"/properties?limit=1&cursor="+page["next_cursor"].(string),token,nil,200)
+ if len(follow["items"].([]any))!=1||follow["items"].([]any)[0].(map[string]any)["id"]==firstID{
+  t.Fatalf("cursor missed or duplicated a property: %v %v",page,follow)
+ }
+ call("GET",base+"/inspections?limit=1&cursor="+page["next_cursor"].(string),token,nil,400)
+ // A malformed batch must not partially apply its first valid mutation.
+ var uncommittedID="00000000-aaaa-4bbb-8ccc-000000000008"
+ malformed:=map[string]any{"mutations":[]any{
+  map[string]any{"mutation_id":"00000000-aaaa-4bbb-8ccc-000000000009","action":"create","entity":"inspection_item",
+  "inspection_id":inspection,"client_id":uncommittedID,"title":"Must not be inserted"},
+  map[string]any{"mutation_id":"00000000-aaaa-4bbb-8ccc-000000000010","action":"create","entity":"inspection_item",
+  "inspection_id":inspection,"client_id":"00000000-aaaa-4bbb-8ccc-000000000011","title":""},
+ }}
+ call("POST",base+"/sync/push",token,malformed,400)
+ var leaked int
+ if err=db.DB.QueryRow(ctx,`SELECT count(*) FROM inspection_items WHERE organization_id=$1 AND client_id=$2`,org,uncommittedID).Scan(&leaked);err!=nil{t.Fatal(err)}
+ if leaked!=0{t.Fatalf("invalid batch partially applied %d mutations",leaked)}
+
 }
