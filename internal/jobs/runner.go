@@ -140,23 +140,30 @@ func (r *Runner) Finish(ctx context.Context, j Job, result json.RawMessage, jobE
 	if err != nil {
 		return err
 	}
-	if jobErr==nil {
-  next:=""
-  if j.Kind=="transcribe"{next="extract"}
-  if j.Kind=="extract"{next="generate_pdf"}
-  if next!="" {
-   _,err=tx.Exec(ctx,`INSERT INTO jobs(organization_id,kind,payload,idempotency_key)
+	if jobErr == nil {
+		next := ""
+		if j.Kind == "transcribe" {
+			next = "extract"
+		}
+		if j.Kind == "extract" {
+			next = "generate_pdf"
+		}
+		if next != "" {
+			_, err = tx.Exec(ctx, `INSERT INTO jobs(organization_id,kind,payload,idempotency_key)
     VALUES($1,$2,$3,$4)
     ON CONFLICT (organization_id,kind,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-    j.OrganizationID,next,string(j.Payload),j.ID)
-   if err!=nil{return err}
-  }
- }
- return tx.Commit(ctx)
+				j.OrganizationID, next, string(j.Payload), j.ID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit(ctx)
 }
+
 // ReapExhausted transitions crashed tasks with no retry budget to dead letters.
 func (r *Runner) ReapExhausted(ctx context.Context) error {
- _,err:=r.DB.Exec(ctx,`
+	_, err := r.DB.Exec(ctx, `
  WITH exhausted AS (
  UPDATE jobs SET state='failed',lease_token=NULL,locked_until=NULL,
  last_error='lease expired after maximum attempts',finished_at=now(),updated_at=now()
@@ -166,7 +173,7 @@ func (r *Runner) ReapExhausted(ctx context.Context) error {
  INSERT INTO job_events(job_id,organization_id,event,attempt,detail)
  SELECT id,organization_id,'dead_lettered',attempts,'lease expired after maximum attempts' FROM exhausted
  `)
- return err
+	return err
 }
 func (r *Runner) ProcessOne(ctx context.Context) (bool, error) {
 	j, err := r.Claim(ctx)
