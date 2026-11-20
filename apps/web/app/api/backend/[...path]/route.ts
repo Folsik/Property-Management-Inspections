@@ -23,6 +23,7 @@ const allowed=[
  /^v1\/organizations\/[0-9a-f-]{36}\/shares\/[0-9a-f-]{36}$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/(items|media|media\/presign)$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/items\/[0-9a-f-]{36}$/,
+ /^v1\/organizations\/[0-9a-f-]{36}\/sync\/(pull|push)$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/media\/[0-9a-f-]{36}(?:\/confirm|\/download)?$/,
 ];
 async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
@@ -38,7 +39,14 @@ async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>
   try{body=await req.text();if(body.length>1_048_576)throw Error("too large");}
   catch{return NextResponse.json({error:"Invalid request"},{status:400});}
  }
- const invoke=(token:string)=>fetchBackend(target,{method:req.method,headers:{
+ const params=new URLSearchParams();
+ for(const [key,value] of req.nextUrl.searchParams){
+  if(key!=="cursor"&&key!=="limit")return NextResponse.json({error:"Unknown query parameter"},{status:400});
+  if(value.length>512)return NextResponse.json({error:"Query parameter too large"},{status:400});
+  params.append(key,value);
+ }
+ const apiPath=target+(params.size?"?"+params.toString():"");
+ const invoke=(token:string)=>fetchBackend(apiPath,{method:req.method,headers:{
   "Authorization":"Bearer "+token,
   ...(body!==undefined?{"Content-Type":"application/json"}:{})
  },body});
