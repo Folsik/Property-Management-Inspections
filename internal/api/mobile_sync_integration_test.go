@@ -102,8 +102,10 @@ func TestMobileSyncConcurrencyAndIsolation(t *testing.T) {
 	cid := "00000000-aaaa-4bbb-8ccc-000000000001"
 	created := call("POST", items, token, map[string]any{"client_id": cid, "title": "Bathroom check", "notes": "initial", "severity": "normal"}, 201)
 	id := created["id"].(string)
- identical:=call("POST",items,token,map[string]any{"client_id":cid,"title":"Bathroom check","notes":"initial","severity":"normal"},201)
- if identical["id"]!=id||identical["version"]!=float64(1){t.Fatalf("idempotent REST create should retain id/version: %v",identical)}
+	identical := call("POST", items, token, map[string]any{"client_id": cid, "title": "Bathroom check", "notes": "initial", "severity": "normal"}, 201)
+	if identical["id"] != id || identical["version"] != float64(1) {
+		t.Fatalf("idempotent REST create should retain id/version: %v", identical)
+	}
 
 	current := call("GET", items+"?limit=1", token, nil, 200)
 	first := current["items"].([]any)[0].(map[string]any)
