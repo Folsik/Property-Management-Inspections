@@ -64,3 +64,7 @@ For production email verification and invitation delivery configure `RESEND_API_
 ## Stage 1: mobile-ready sessions
 
 Rotating refresh tokens, replay detection, individual device revocation, Next.js session renewal and DB-backed admission limits are documented in [authentication sessions](docs/auth-sessions.md). Direct phone-based team additions have been disabled in favor of verified-email invitations.
+
+## Stage 2 — Media Service (integration branch)
+
+Media presigning, upload confirmation with S3 HEAD and ranged content signature checks, immutable verified objects, tenant-scoped signed reads, deletion and background staging cleanup are described in [media lifecycle](docs/media-lifecycle.md). Requires private S3/R2 configuration. These changes are staged on feat/bootstrap-foundation and are not in main until manually approved.

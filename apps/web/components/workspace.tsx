@@ -256,12 +256,36 @@ export function Workspace(){
   if(!["image/jpeg","image/png","image/heic","audio/mp4","audio/mpeg"].includes(mime)){setError("Supported formats: JPEG, PNG, HEIC, MP4 audio or MPEG audio.");return;}
   setUploading(true);setError("");
   try{
-   const ticket=await post<{upload_url:string;headers:Record<string,string>}>(`v1/organizations/${orgID}/inspections/${selectedID}/media/presign`,{mime_type:mime,size_bytes:file.size});
+   const ticket=await post<{id:string;upload_url:string;headers:Record<string,string>}>(`v1/organizations/${orgID}/inspections/${selectedID}/media/presign`,{mime_type:mime,size_bytes:file.size});
    const uploaded=await fetch(ticket.upload_url,{method:"PUT",headers:ticket.headers,body:file});
    if(!uploaded.ok)throw Error("Storage rejected the upload ("+uploaded.status+"). Verify R2/S3 bucket CORS permissions.");
-   setNotice("File transferred to storage. Media verification and processing are pending.");
+   const confirmed=await post<{state:string}>(`v1/organizations/${orgID}/inspections/${selectedID}/media/${ticket.id}/confirm`,{});
+   if(confirmed.state!=="uploaded")throw Error("Media verification failed");
+   setNotice("Media verified and ready to download.");
    await reloadDetail(orgID,selectedID);
   }catch(e){showError(e);}finally{setUploading(false);}
+ }
+ async function downloadMediaObject(id:string){
+  setError("");
+  try{
+   const link=await get<{download_url:string}>(`v1/organizations/${orgID}/inspections/${selectedID}/media/${id}/download`);
+   const url=new URL(link.download_url);
+   if(url.protocol!=="https:")throw Error("Insecure download URL");
+   window.location.assign(url.toString());
+  }catch(e){showError(e);}
+ }
+ async function deleteMediaObject(id:string){
+  if(!window.confirm("Permanently delete this file?"))return;
+  setSaving(true);setError("");
+  try{await api(`v1/organizations/${orgID}/inspections/${selectedID}/media/${id}`,{method:"DELETE"});
+   await reloadDetail(orgID,selectedID);setNotice("Media deleted.");
+  }catch(e){showError(e);}finally{setSaving(false);}
+ }
+ async function retryMediaConfirm(id:string){
+  setSaving(true);setError("");
+  try{await post(`v1/organizations/${orgID}/inspections/${selectedID}/media/${id}/confirm`,{});
+   await reloadDetail(orgID,selectedID);setNotice("Media verified.");
+  }catch(e){showError(e);}finally{setSaving(false);}
  }
  async function saveProfile(event:FormEvent){
   event.preventDefault();setSaving(true);setError("");
@@ -345,7 +369,7 @@ export function Workspace(){
           {["draft","in_progress"].includes(selected.status)&&<Select value={item.status} disabled={saving} onValueChange={value=>void setItemStatus(item.id,value as ItemStatus)}><SelectTrigger aria-label={"Status for "+item.title} className="h-9 w-[148px] shrink-0 rounded-lg border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm hover:border-blue-300"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="in_progress">In progress</SelectItem><SelectItem value="resolved">Resolved</SelectItem></SelectContent></Select>}</div>)}</div>:<Empty icon={ClipboardList} title="No punch-list items" description="Create the first item to record a condition, issue, or outstanding task." action={["draft","in_progress"].includes(selected.status)?<Button onClick={()=>openDialog("item")}><Plus className="size-4"/>Add item</Button>:undefined}/>}
         </Card>
         <Card className="overflow-hidden"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-5"><div><h2 className="text-base font-bold">Photos & audio</h2><p className="mt-1 text-xs text-slate-400">Direct encrypted transfer to configured S3/R2 storage</p></div><label className={cn("inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white",uploading&&"pointer-events-none opacity-50")}><Upload className="size-4"/>{uploading?"Uploading…":"Upload media"}<input type="file" className="sr-only" accept="image/jpeg,image/png,image/heic,audio/mp4,audio/mpeg" onChange={e=>void uploadFile(e)} disabled={uploading}/></label></div>
-         {media.length?<div className="divide-y divide-slate-100">{media.map(m=><div key={m.id} className="flex items-center justify-between gap-3 px-6 py-4"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-slate-50 text-slate-500"><ImageIcon className="size-5"/></span><div><p className="text-sm font-semibold text-slate-700">{m.mime_type}</p><p className="text-xs text-slate-400">{(m.size_bytes/1024/1024).toFixed(2)} MB · {humanDate(m.created_at)}</p></div></div><Badge tone={statusTone(m.state)}>{m.state}</Badge></div>)}</div>:<Empty icon={ImageIcon} title="No media attached" description="Upload photos or audio recorded during the inspection."/>}
+         {media.length?<div className="divide-y divide-slate-100">{media.map(m=><div key={m.id} className="flex items-center justify-between gap-3 px-6 py-4"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-slate-50 text-slate-500"><ImageIcon className="size-5"/></span><div><p className="text-sm font-semibold text-slate-700">{m.mime_type}</p><p className="text-xs text-slate-400">{(m.size_bytes/1024/1024).toFixed(2)} MB · {humanDate(m.created_at)}</p></div></div><div className="flex flex-wrap items-center gap-2"><Badge tone={statusTone(m.state)}>{m.state}</Badge>{m.state==="uploaded"&&<Button size="sm" variant="outline" onClick={()=>void downloadMediaObject(m.id)}>Download</Button>}{m.state==="pending"&&<Button size="sm" variant="outline" disabled={saving} onClick={()=>void retryMediaConfirm(m.id)}>Verify</Button>}<Button size="sm" variant="outline" disabled={saving} onClick={()=>void deleteMediaObject(m.id)}>Delete</Button></div></div>)}</div>:<Empty icon={ImageIcon} title="No media attached" description="Upload photos or audio recorded during the inspection."/>}
         </Card>
        </>}
       </>:<>

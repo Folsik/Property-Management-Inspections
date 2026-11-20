@@ -104,7 +104,7 @@ func (s *Server) presignMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id string
-	err = s.db.QueryRow(r.Context(), "INSERT INTO media_attachments(organization_id,inspection_id,uploaded_by,object_key,mime_type,size_bytes) VALUES($1,$2,$3,$4,$5,$6) RETURNING id", r.PathValue("org"), inspection, who(r).UserID, objectKey, in.MimeType, in.SizeBytes).Scan(&id)
+	err = s.db.QueryRow(r.Context(), "INSERT INTO media_attachments(organization_id,inspection_id,uploaded_by,object_key,staging_key,mime_type,size_bytes) VALUES($1,$2,$3,$4,$4,$5,$6) RETURNING id", r.PathValue("org"), inspection, who(r).UserID, objectKey, in.MimeType, in.SizeBytes).Scan(&id)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return

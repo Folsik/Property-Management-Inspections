@@ -18,6 +18,6 @@ export function sameOrigin(request:Request):boolean{
  }catch{return false;}
 }
 export async function fetchBackend(path:string,init:RequestInit={}){
- try{return await fetch(backendURL(path),{...init,cache:"no-store",signal:AbortSignal.timeout(12000)});}
+ try{return await fetch(backendURL(path),{...init,cache:"no-store",signal:AbortSignal.timeout(/\/media\/[0-9a-f-]{36}\/confirm$/.test(path)?55000:12000)});}
  catch{return new Response(JSON.stringify({error:"Backend unavailable"}),{status:503,headers:{"Content-Type":"application/json"}});}
 }
