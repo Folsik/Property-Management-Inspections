@@ -1,6 +1,6 @@
 # Inspectly mobile API v1 — Stage 3 contract
 
-Status: **implemented on `feat/bootstrap-foundation` only**, pending owner review and manual iOS/web verification. No changes from Stage 3 have been merged into `main`.
+Status: **Stage 3 approved and merged to `main` via PR #11 on 2026-11-20**. Stage 4 is implemented separately in `feat/bootstrap-foundation` and remains pending verification.
 
 ## Authentication and tenancy
 
