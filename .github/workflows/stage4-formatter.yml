@@ -14,13 +14,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
-      - run: gofmt -w internal/jobs/*.go
+      - run: gofmt -w internal/jobs/*.go internal/api/processing.go internal/api/worker_media.go cmd/worker/main.go
       - name: Commit formatting only when necessary
         run: |
-          if ! git diff --quiet -- internal/jobs; then
+          if ! git diff --quiet -- internal/jobs internal/api/processing.go internal/api/worker_media.go cmd/worker/main.go; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add internal/jobs
+            git add internal/jobs internal/api/processing.go internal/api/worker_media.go cmd/worker/main.go
             git commit -m "style(workers): gofmt worker implementation"
             git push
           fi
