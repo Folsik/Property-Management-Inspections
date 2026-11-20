@@ -134,28 +134,43 @@ func (s *Server) pushSync(w http.ResponseWriter, r *http.Request) {
 	}
 	org, user := r.PathValue("org"), who(r).UserID
 	// Validate every mutation before applying any mutation in the batch.
-    // On validation failure a 400 response never conceals earlier commits.
-    for i:=range in.Mutations {
-      m:=&in.Mutations[i]
-      if !validID(m.MutationID)||m.Entity!="inspection_item"||
-         (m.Action!="create"&&m.Action!="update"&&m.Action!="delete")||
-         !validID(m.InspectionID)||
-         (m.Action=="create"&&!validID(m.ClientID))||
-         (m.Action!="create"&&(!validID(m.ID)||m.Version==nil||*m.Version<1)){
-        fail(w,400,"invalid sync mutation");return
-      }
-      if m.Action=="create"{
-        m.Title=strings.TrimSpace(m.Title)
-        noteLength:=0
-        if m.Notes!=nil{noteLength=len(*m.Notes)}
-        if len(m.Title)<1||len(m.Title)>500||noteLength>10000{fail(w,400,"invalid item");return}
-      }
-      if m.Notes!=nil&&len(*m.Notes)>10000{fail(w,400,"notes too long");return}
-      if m.Severity!=""&&m.Severity!="normal"&&m.Severity!="low"&&m.Severity!="high"&&m.Severity!="critical"{fail(w,400,"invalid severity");return}
-      if m.Status!=""&&m.Status!="open"&&m.Status!="in_progress"&&m.Status!="resolved"{fail(w,400,"invalid status");return}
-    }
-    results:=make([]map[string]any,0,len(in.Mutations))
-    for _,m:=range in.Mutations {
+	// On validation failure a 400 response never conceals earlier commits.
+	for i := range in.Mutations {
+		m := &in.Mutations[i]
+		if !validID(m.MutationID) || m.Entity != "inspection_item" ||
+			(m.Action != "create" && m.Action != "update" && m.Action != "delete") ||
+			!validID(m.InspectionID) ||
+			(m.Action == "create" && !validID(m.ClientID)) ||
+			(m.Action != "create" && (!validID(m.ID) || m.Version == nil || *m.Version < 1)) {
+			fail(w, 400, "invalid sync mutation")
+			return
+		}
+		if m.Action == "create" {
+			m.Title = strings.TrimSpace(m.Title)
+			noteLength := 0
+			if m.Notes != nil {
+				noteLength = len(*m.Notes)
+			}
+			if len(m.Title) < 1 || len(m.Title) > 500 || noteLength > 10000 {
+				fail(w, 400, "invalid item")
+				return
+			}
+		}
+		if m.Notes != nil && len(*m.Notes) > 10000 {
+			fail(w, 400, "notes too long")
+			return
+		}
+		if m.Severity != "" && m.Severity != "normal" && m.Severity != "low" && m.Severity != "high" && m.Severity != "critical" {
+			fail(w, 400, "invalid severity")
+			return
+		}
+		if m.Status != "" && m.Status != "open" && m.Status != "in_progress" && m.Status != "resolved" {
+			fail(w, 400, "invalid status")
+			return
+		}
+	}
+	results := make([]map[string]any, 0, len(in.Mutations))
+	for _, m := range in.Mutations {
 		// Canonical Go JSON encoding yields stable hashes for exactly the same decoded request.
 		canonical, _ := json.Marshal(m)
 		digest := sha256.Sum256(canonical)
@@ -198,19 +213,29 @@ func (s *Server) pushSync(w http.ResponseWriter, r *http.Request) {
 			fail(w, 503, "unavailable")
 			return
 		}
-		if tag.RowsAffected()==0{
-          // Under READ COMMITTED the prior conflicting insert has committed
-          // before ON CONFLICT returns; replay it without applying any writes.
-          err=tx.QueryRow(r.Context(),`SELECT request_hash,response_body FROM idempotency_keys
+		if tag.RowsAffected() == 0 {
+			// Under READ COMMITTED the prior conflicting insert has committed
+			// before ON CONFLICT returns; replay it without applying any writes.
+			err = tx.QueryRow(r.Context(), `SELECT request_hash,response_body FROM idempotency_keys
             WHERE organization_id=$1 AND actor_id=$2 AND key=$3 FOR UPDATE`,
-            org,user,m.MutationID).Scan(&existing,&output)
-          tx.Rollback(r.Context())
-          if err!=nil{fail(w,503,"idempotent replay unavailable");return}
-          if !bytes.Equal(existing,digest[:]){fail(w,409,"idempotency key reused with different content");return}
-          var replay map[string]any
-          if json.Unmarshal(output,&replay)!=nil{fail(w,503,"invalid replay result");return}
-          results=append(results,replay);continue
-        }
+				org, user, m.MutationID).Scan(&existing, &output)
+			tx.Rollback(r.Context())
+			if err != nil {
+				fail(w, 503, "idempotent replay unavailable")
+				return
+			}
+			if !bytes.Equal(existing, digest[:]) {
+				fail(w, 409, "idempotency key reused with different content")
+				return
+			}
+			var replay map[string]any
+			if json.Unmarshal(output, &replay) != nil {
+				fail(w, 503, "invalid replay result")
+				return
+			}
+			results = append(results, replay)
+			continue
+		}
 		result, err := applySyncItem(r, tx, org, m)
 		if err != nil {
 			tx.Rollback(r.Context())
