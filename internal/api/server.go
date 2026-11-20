@@ -71,6 +71,7 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("GET /v1/organizations/{org}/members", s.protect(http.HandlerFunc(s.listMembers)))
 	m.Handle("GET /v1/organizations/{org}/jobs", s.protect(http.HandlerFunc(s.listJobs)))
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/transcriptions", s.protect(http.HandlerFunc(s.enqueueTranscription)))
+	m.Handle("POST /v1/organizations/{org}/jobs/{job}/retry", s.protect(http.HandlerFunc(s.requeueFailedJob)))
 	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/reports/{media}/pdf", s.protect(http.HandlerFunc(s.downloadGeneratedReport)))
 	m.Handle("PATCH /v1/me", s.protect(http.HandlerFunc(s.updateProfile)))
 	m.Handle("GET /v1/organizations/{org}/contacts", s.protect(http.HandlerFunc(s.listContacts)))
