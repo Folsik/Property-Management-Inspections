@@ -8,8 +8,8 @@ AI-assisted property inspections and punch lists for property managers and short
 - **Auth:** phone-first SMS OTP sign-up (Twilio SMS in production), Argon2id password sign-in (legacy bcrypt supported) by verified email or E.164 phone, Ed25519 access JWT with revocation; roles are owner, manager and inspector.
 - **Media:** S3-compatible storage / Cloudflare R2 direct uploads (presigned requests).
 - **Clients:** Next.js 15 / Tailwind CSS 4 / shadcn-style web workspace implemented; SwiftUI iOS remains planned.
-- **Workers (planned):** transcription, structured extraction, PDF report generation using PostgreSQL SKIP LOCKED.
-- **Integrations:** Twilio SMS and Resend transactional email (configure credentials), guest inspection report links; Whisper/LLM and Stripe remain planned.
+- **Workers (Stage 4 feature branch):** separate Go worker with PostgreSQL SKIP LOCKED, leases/fencing, retry and dead letters; verified audio STT gateway → verbatim extraction → minimal PDF; see `docs/workers-stage4.md`.
+- **Integrations:** Twilio SMS, Resend email, guest report links and custom HTTPS STT adapter (not yet provider-specific); advanced structured AI extraction and Stripe remain planned.
 
 ## Quick start
 ```sh
@@ -72,3 +72,5 @@ Media presigning, upload confirmation with S3 HEAD and ranged content signature 
 ## Stage 3 — mobile API contract (integration branch only)
 
 `feat/bootstrap-foundation` contains the additive v10 mobile sync schema, versioned records, tenant-keyset pagination, durable change/tombstone feed, idempotent offline inspection-item mutations, and 409 stale-version conflict handling. See [the API contract](docs/api-v1-mobile.md) and [OpenAPI](docs/openapi/mobile-v1.yaml). This stage must be reviewed and manually approved before any merge into main. Stage 2 Media Service remains in main.
+
+Stage 3 mobile sync is merged to `main` (PR #11). Stage 4 work is isolated to `feat/bootstrap-foundation` pending approval; configure `TRANSCRIPTION_ENDPOINT` and `TRANSCRIPTION_API_KEY` for real speech recognition.
