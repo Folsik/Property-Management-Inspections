@@ -104,17 +104,17 @@ func (s *Server) pullSync(w http.ResponseWriter, r *http.Request) {
 }
 
 type syncMutation struct {
-	MutationID   string `json:"mutation_id"`
-	Entity       string `json:"entity"`
-	Action       string `json:"action"`
-	InspectionID string `json:"inspection_id"`
-	ID           string `json:"id"`
-	ClientID     string `json:"client_id"`
-	Version      *int64 `json:"version"`
-	Title        string `json:"title"`
+	MutationID   string  `json:"mutation_id"`
+	Entity       string  `json:"entity"`
+	Action       string  `json:"action"`
+	InspectionID string  `json:"inspection_id"`
+	ID           string  `json:"id"`
+	ClientID     string  `json:"client_id"`
+	Version      *int64  `json:"version"`
+	Title        string  `json:"title"`
 	Notes        *string `json:"notes"`
-	Severity     string `json:"severity"`
-	Status       string `json:"status"`
+	Severity     string  `json:"severity"`
+	Status       string  `json:"status"`
 }
 
 func (s *Server) pushSync(w http.ResponseWriter, r *http.Request) {
@@ -145,9 +145,11 @@ func (s *Server) pushSync(w http.ResponseWriter, r *http.Request) {
 		}
 		if m.Action == "create" {
 			m.Title = strings.TrimSpace(m.Title)
-			noteLength:=0
-   if m.Notes!=nil{noteLength=len(*m.Notes)}
-   if len(m.Title) < 1 || len(m.Title) > 500 || noteLength > 10000 {
+			noteLength := 0
+			if m.Notes != nil {
+				noteLength = len(*m.Notes)
+			}
+			if len(m.Title) < 1 || len(m.Title) > 500 || noteLength > 10000 {
 				fail(w, 400, "invalid item")
 				return
 			}
@@ -234,8 +236,10 @@ func applySyncItem(r *http.Request, tx pgx.Tx, org string, m syncMutation) (map[
 	ctx := r.Context()
 	result := map[string]any{"mutation_id": m.MutationID, "entity": m.Entity, "action": m.Action}
 	if m.Action == "create" {
-        notes:=""
-        if m.Notes!=nil{notes=*m.Notes}
+		notes := ""
+		if m.Notes != nil {
+			notes = *m.Notes
+		}
 		severity := m.Severity
 		if severity == "" {
 			severity = "normal"
