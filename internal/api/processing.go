@@ -2,7 +2,6 @@ package api
 
 import (
  "net/http"
- "strings"
 )
 func (s *Server) enqueueTranscription(w http.ResponseWriter,r *http.Request){
  if _,ok:=s.role(r,"owner","manager","inspector");!ok{fail(w,403,"forbidden");return}
@@ -52,4 +51,25 @@ func (s *Server) downloadGeneratedReport(w http.ResponseWriter,r *http.Request){
  w.WriteHeader(http.StatusOK)
  _,_=w.Write(content)
 }
-var _ = strings.TrimSpace
+
+func (s *Server) requeueFailedJob(w http.ResponseWriter,r *http.Request){
+ if _,ok:=s.role(r,"owner","manager");!ok{fail(w,403,"forbidden");return}
+ id:=r.PathValue("job")
+ if !validID(id){fail(w,400,"invalid job");return}
+ tx,err:=s.db.Begin(r.Context());if err!=nil{fail(w,503,"unavailable");return}
+ defer tx.Rollback(r.Context())
+ var attempts int
+ err=tx.QueryRow(r.Context(),`UPDATE jobs SET state='pending',attempts=0,run_after=now(),locked_until=NULL,
+ lease_token=NULL,finished_at=NULL,last_error=NULL,updated_at=now()
+ WHERE id=$1 AND organization_id=$2 AND state='failed' RETURNING attempts`,
+ id,r.PathValue("org")).Scan(&attempts)
+ if err!=nil {fail(w,404,"failed job not found");return}
+ _,err=tx.Exec(r.Context(),`INSERT INTO job_events(job_id,organization_id,event,attempt)
+ VALUES($1,$2,'requeued',$3)`,id,r.PathValue("org"),attempts)
+ if err!=nil{fail(w,503,"unavailable");return}
+ _,err=tx.Exec(r.Context(),`INSERT INTO audit_log(organization_id,actor_id,action,resource_type,resource_id)
+ VALUES($1,$2,'job.requeued','job',$3)`,r.PathValue("org"),who(r).UserID,id)
+ if err!=nil{fail(w,503,"unavailable");return}
+ if err=tx.Commit(r.Context());err!=nil{fail(w,503,"unavailable");return}
+ write(w,202,map[string]string{"id":id,"status":"pending"})
+}
