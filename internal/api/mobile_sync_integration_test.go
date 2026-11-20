@@ -179,6 +179,19 @@ func TestMobileSyncConcurrencyAndIsolation(t *testing.T) {
 	if synced["results"].([]any)[0].(map[string]any)["status"] != float64(200) {
 		t.Fatalf("resolution failed: %v", synced)
 	}
+ // The user may intentionally clear a field. Empty string and omitted notes
+ // are different operations and must not silently leave stale local text.
+ clearNotes:=map[string]any{"mutations":[]any{map[string]any{
+  "mutation_id":"00000000-aaaa-4bbb-8ccc-000000000007",
+  "action":"update","entity":"inspection_item",
+  "inspection_id":inspection,"id":newID,"version":3,"notes":"",
+ }}}
+ cleared:=call("POST",base+"/sync/push",token,clearNotes,200)
+ if cleared["results"].([]any)[0].(map[string]any)["status"]!=float64(200){t.Fatalf("clear notes rejected: %v",cleared)}
+ var savedNotes string
+ if err=db.DB.QueryRow(ctx,`SELECT notes FROM inspection_items WHERE id=$1`,newID).Scan(&savedNotes);err!=nil{t.Fatal(err)}
+ if savedNotes!=""{t.Fatalf("offline notes were not cleared: %q",savedNotes)}
+
 	call("POST", base+"/sync/push", otherToken, request, 403)
 	// Cursor seek pagination for large lists must not produce duplicate rows.
 	page := call("GET", base+"/properties?limit=1", token, nil, 200)
