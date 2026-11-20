@@ -38,8 +38,14 @@ func (s *Server) enqueueTranscription(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "verified audio not found")
 		return
 	}
+	tx, err := s.db.Begin(r.Context())
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	defer tx.Rollback(r.Context())
 	var id string
-	err = s.db.QueryRow(r.Context(), `
+	err = tx.QueryRow(r.Context(), `
  INSERT INTO jobs(organization_id,kind,payload,idempotency_key)
  VALUES($1,'transcribe',jsonb_build_object('inspection_id',$2::text,'media_id',$3::text),$4)
  ON CONFLICT (organization_id,kind,idempotency_key) WHERE idempotency_key IS NOT NULL
@@ -51,7 +57,7 @@ func (s *Server) enqueueTranscription(w http.ResponseWriter, r *http.Request) {
 	}
 	// Existing jobs with reused keys must have identical content.
 	var matches bool
-	err = s.db.QueryRow(r.Context(), `SELECT payload->>'inspection_id'=$2 AND payload->>'media_id'=$3
+	err = tx.QueryRow(r.Context(), `SELECT payload->>'inspection_id'=$2 AND payload->>'media_id'=$3
  FROM jobs WHERE id=$1 AND organization_id=$4`, id, inspection, in.MediaID, org).Scan(&matches)
 	if err != nil {
 		fail(w, 503, "unavailable")
@@ -59,6 +65,16 @@ func (s *Server) enqueueTranscription(w http.ResponseWriter, r *http.Request) {
 	}
 	if !matches {
 		fail(w, 409, "idempotency key reused with different content")
+		return
+	}
+	_, err = tx.Exec(r.Context(), `INSERT INTO audit_log(organization_id,actor_id,action,resource_type,resource_id)
+ VALUES($1,$2,'transcription.requested','job',$3)`, org, who(r).UserID, id)
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	if err = tx.Commit(r.Context()); err != nil {
+		fail(w, 503, "unavailable")
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -75,7 +91,11 @@ func (s *Server) downloadGeneratedReport(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var content []byte
-	err := s.db.QueryRow(r.Context(), `SELECT content FROM inspection_generated_reports WHERE organization_id=$1 AND inspection_id=$2 AND media_id=$3`, r.PathValue("org"), inspection, media).Scan(&content)
+	err := s.db.QueryRow(r.Context(), `SELECT r.content FROM inspection_generated_reports r
+ JOIN media_attachments m ON m.organization_id=r.organization_id AND m.inspection_id=r.inspection_id AND m.id=r.media_id
+ JOIN inspections i ON i.organization_id=r.organization_id AND i.id=r.inspection_id
+ WHERE r.organization_id=$1 AND r.inspection_id=$2 AND r.media_id=$3
+ AND m.state='uploaded' AND m.deleted_at IS NULL AND i.deleted_at IS NULL`, r.PathValue("org"), inspection, media).Scan(&content)
 	if err != nil {
 		fail(w, 404, "report not available")
 		return
