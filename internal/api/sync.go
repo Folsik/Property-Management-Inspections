@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -280,13 +279,13 @@ func applySyncItem(r *http.Request, tx pgx.Tx, org string, m syncMutation) (map[
 			return result, nil
 		}
 		err := tx.QueryRow(ctx, `UPDATE inspection_items SET
-   title=CASE WHEN $6<>'' THEN $6 ELSE title END,
-   notes=CASE WHEN $7<>'' THEN $7 ELSE notes END,
-   severity=CASE WHEN $8<>'' THEN $8 ELSE severity END,
-   status=CASE WHEN $9<>'' THEN $9 ELSE status END
+   title=CASE WHEN $5<>'' THEN $5 ELSE title END,
+   notes=CASE WHEN $6<>'' THEN $6 ELSE notes END,
+   severity=CASE WHEN $7<>'' THEN $7 ELSE severity END,
+   status=CASE WHEN $8<>'' THEN $8 ELSE status END
    WHERE organization_id=$1 AND inspection_id=$2 AND id=$3 AND version=$4 AND deleted_at IS NULL
    AND EXISTS(SELECT 1 FROM inspections WHERE organization_id=$1 AND id=$2 AND status IN ('draft','in_progress') AND deleted_at IS NULL)
-   RETURNING id,version`, org, m.InspectionID, m.ID, *m.Version, true, m.Title, m.Notes, m.Severity, m.Status).Scan(&id, &version)
+   RETURNING id,version`, org, m.InspectionID, m.ID, *m.Version, m.Title, m.Notes, m.Severity, m.Status).Scan(&id, &version)
 		if err == nil {
 			result["status"] = 200
 			result["id"] = id
@@ -327,4 +326,3 @@ func applySyncItem(r *http.Request, tx pgx.Tx, org string, m syncMutation) (map[
 	return result, nil
 }
 
-var _ = fmt.Sprintf
