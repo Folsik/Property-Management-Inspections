@@ -19,7 +19,7 @@ jobs:
           git fetch origin feat/bootstrap-foundation
           git checkout feat/bootstrap-foundation
           git reset --hard origin/feat/bootstrap-foundation
-      - run: gofmt -w internal/jobs/*.go internal/api/processing.go internal/api/worker_media.go cmd/worker/main.go
+      - run: gofmt -w internal/jobs/*.go internal/api/processing.go internal/api/worker_media.go internal/api/job_metrics.go cmd/worker/main.go
       - name: Commit formatting only when necessary
         run: |
           if ! git diff --quiet -- internal/jobs internal/api/processing.go internal/api/worker_media.go cmd/worker/main.go; then
