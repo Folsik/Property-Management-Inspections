@@ -39,13 +39,13 @@ async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>
   try{body=await req.text();if(body.length>1_048_576)throw Error("too large");}
   catch{return NextResponse.json({error:"Invalid request"},{status:400});}
  }
- const params=new URLSearchParams();
+ const queryParams=new URLSearchParams();
  for(const [key,value] of req.nextUrl.searchParams){
   if(key!=="cursor"&&key!=="limit")return NextResponse.json({error:"Unknown query parameter"},{status:400});
   if(value.length>512)return NextResponse.json({error:"Query parameter too large"},{status:400});
-  params.append(key,value);
+  queryParams.append(key,value);
  }
- const apiPath=target+(params.size?"?"+params.toString():"");
+ const apiPath=target+(queryParams.size?"?"+queryParams.toString():"");
  const invoke=(token:string)=>fetchBackend(apiPath,{method:req.method,headers:{
   "Authorization":"Bearer "+token,
   ...(body!==undefined?{"Content-Type":"application/json"}:{})
