@@ -147,18 +147,38 @@ func (p *Pipeline) GeneratePDF(ctx context.Context, j Job) (json.RawMessage, err
 	if err != nil {
 		return nil, err
 	}
-	// A bounded, one-page PDF summary; transcript remains persisted separately.
-	lines := []string{"Inspection audio report", "Property: " + propertyName, "Inspection: " + t.InspectionID, "Audio: " + t.MediaID, "Transcript excerpt:"}
-	for _, line := range strings.Split(transcript, "\n") {
-		for len(line) > 88 {
-			lines = append(lines, line[:88])
-			line = line[88:]
+	var encodedNotes []byte
+	err = p.DB.QueryRow(ctx, `SELECT notes FROM inspection_extractions
+ WHERE organization_id=$1 AND inspection_id=$2 AND media_id=$3`,
+		j.OrganizationID, t.InspectionID, t.MediaID).Scan(&encodedNotes)
+	if err != nil {
+		return nil, err
+	}
+	var extracted []string
+	if err := json.Unmarshal(encodedNotes, &extracted); err != nil {
+		return nil, err
+	}
+	// Report the actual extraction output, never invent inferred defects.
+	lines := []string{"Inspection audio report", "Property: " + propertyName, "Inspection: " + t.InspectionID, "Audio: " + t.MediaID, "Extracted notes (verbatim):"}
+	appendLine := func(value string) {
+		for len(value) > 88 && len(lines) < 48 {
+			lines = append(lines, value[:88])
+			value = value[88:]
 		}
-		lines = append(lines, line)
+		if len(lines) < 48 {
+			lines = append(lines, value)
+		}
+	}
+	for _, note := range extracted {
+		appendLine(note)
 		if len(lines) >= 48 {
 			break
 		}
 	}
+	if len(extracted) == 0 {
+		appendLine("No extracted notes")
+	}
+	_ = transcript // full source transcript remains available in inspection_transcripts
 	pdf := simplePDF(lines)
 	_, err = p.DB.Exec(ctx, `INSERT INTO inspection_generated_reports(organization_id,inspection_id,media_id,content)
  VALUES($1,$2,$3,$4) ON CONFLICT (organization_id,inspection_id,media_id)
