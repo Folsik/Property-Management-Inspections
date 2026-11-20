@@ -86,3 +86,7 @@ Next.js middleware renews protected pages near expiry; the BFF retries once on 4
 ### Verified photo/audio uploads
 
 Inspectly uses a presign → direct browser PUT → confirm workflow. Only HEAD-verified, magic-byte-checked immutable copies can be downloaded from short-lived S3/R2 GET URLs. Uploads that fail confirmation remain pending or rejected with a retry button. Uploaded or pending entries can be deleted from the inspection. See [Media Service](../../docs/media-lifecycle.md).
+
+### Mobile API compatibility
+
+Properties, inspections, inspection items and media lists return `next_cursor`, `has_more`, `updated_at` and `version`. Existing web lists still load their first page. Optimistic status updates submit the observed version; a stale version returns HTTP 409 rather than overwriting another user's changes. The authenticated BFF forwards allowlisted sync paths and validated cursor/limit query parameters. See [mobile v1 API](../../docs/api-v1-mobile.md).
