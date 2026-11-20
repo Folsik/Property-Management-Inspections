@@ -325,4 +325,3 @@ func applySyncItem(r *http.Request, tx pgx.Tx, org string, m syncMutation) (map[
 	result["current"] = json.RawMessage(current)
 	return result, nil
 }
-
