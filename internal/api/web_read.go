@@ -331,40 +331,29 @@ func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, map[string]any{"items": items})
 }
 
-func (s *Server) listMedia(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.role(r, "owner", "manager", "inspector"); !ok {
-		fail(w, 403, "forbidden")
-		return
-	}
-	inspection := r.PathValue("inspection")
-	if !validID(inspection) {
-		fail(w, 400, "invalid inspection ID")
-		return
-	}
-	rows, err := s.db.Query(r.Context(), `SELECT id,mime_type,size_bytes,state,created_at
-		FROM media_attachments WHERE organization_id=$1 AND inspection_id=$2 AND state<>'deleted'
-		ORDER BY created_at DESC LIMIT 200`, r.PathValue("org"), inspection)
-	if err != nil {
-		fail(w, 503, "database unavailable")
-		return
-	}
-	defer rows.Close()
-	items := make([]map[string]any, 0)
-	for rows.Next() {
-		var id, mime, state string
-		var size int64
-		var created time.Time
-		if err := rows.Scan(&id, &mime, &size, &state, &created); err != nil {
-			fail(w, 503, "database unavailable")
-			return
-		}
-		items = append(items, map[string]any{"id": id, "mime_type": mime, "size_bytes": size, "state": state, "created_at": created})
-	}
-	if rows.Err() != nil {
-		fail(w, 503, "database unavailable")
-		return
-	}
-	write(w, 200, map[string]any{"items": items})
+func (s *Server) listMedia(w http.ResponseWriter,r *http.Request){
+ if _,ok:=s.role(r,"owner","manager","inspector");!ok{fail(w,403,"forbidden");return}
+ inspection:=r.PathValue("inspection")
+ if !validID(inspection){fail(w,400,"invalid inspection ID");return}
+ limit,created,cursorID,err:=pageOptions(r,"media:"+inspection,200,200)
+ if err!=nil{fail(w,400,err.Error());return}
+ rows,err:=s.db.Query(r.Context(),`SELECT id,mime_type,size_bytes,state,created_at,updated_at,version
+ FROM media_attachments WHERE organization_id=$1 AND inspection_id=$2 AND state<>'deleted'
+ AND (created_at,id)<($3,$4::uuid)
+ ORDER BY created_at DESC,id DESC LIMIT $5`,r.PathValue("org"),inspection,created,cursorID,limit+1)
+ if err!=nil{fail(w,503,"database unavailable");return}
+ defer rows.Close()
+ items:=make([]map[string]any,0);next:="";more:=false
+ for rows.Next(){
+  var id,mime,state string;var size,version int64;var createdAt,updated time.Time
+  if err=rows.Scan(&id,&mime,&size,&state,&createdAt,&updated,&version);err!=nil{fail(w,503,"database unavailable");return}
+  if len(items)==limit{more=true;break}
+  items=append(items,map[string]any{"id":id,"mime_type":mime,"size_bytes":size,"state":state,
+   "created_at":createdAt,"updated_at":updated,"version":version})
+  next=encodeSeekCursor(r.PathValue("org"),"media:"+inspection,createdAt,id)
+ }
+ if rows.Err()!=nil{fail(w,503,"database unavailable");return}
+ write(w,200,map[string]any{"items":items,"next_cursor":next,"has_more":more})
 }
 
 // inspectable job state is informational; no PDF or AI report is claimed to exist until workers complete.
