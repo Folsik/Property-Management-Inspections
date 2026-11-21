@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Inspectly Mobile Sync API
-  version: 1.0.0-stage3
-  description: Stage 3 online-first mobile sync contract. All paths require Bearer auth and organization membership.
+  version: 1.1.0-stage4
+  description: Mobile sync (Stage 3) and tenant-scoped async processing (Stage 4). All paths require Bearer auth and organization membership.
 servers:
   - url: /
 security:
@@ -127,3 +127,65 @@ paths:
                     items: {$ref: '#/components/schemas/MutationResult'}
         '409': {description: Mutation ID reused with different content}
         '403': {description: Tenant access denied}
+
+  /v1/organizations/{org}/inspections/{inspection}/transcriptions:
+    post:
+      summary: Queue transcription for verified, undeleted audio
+      parameters:
+        - {$ref: '#/components/parameters/Org'}
+        - {$ref: '#/components/parameters/Inspection'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [media_id, idempotency_key]
+              properties:
+                media_id: {type: string, format: uuid}
+                idempotency_key: {type: string, format: uuid}
+      responses:
+        '202': {description: Queued or previously queued identical job; returns id and status}
+        '400': {description: Invalid request}
+        '403': {description: Not a member or insufficient role}
+        '404': {description: No verified audio for this inspection}
+        '409': {description: Idempotency key reused with different payload}
+  /v1/organizations/{org}/inspections/{inspection}/reports/{media}/pdf:
+    get:
+      summary: Download generated inspection PDF
+      parameters:
+        - {$ref: '#/components/parameters/Org'}
+        - {$ref: '#/components/parameters/Inspection'}
+        - name: media
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Generated report
+          content:
+            application/pdf:
+              schema: {type: string, format: binary}
+        '403': {description: Access denied}
+        '404': {description: Report not generated yet}
+  /v1/organizations/{org}/jobs/metrics:
+    get:
+      summary: Organization queue counts and oldest pending age (owner/manager)
+      parameters:
+        - {$ref: '#/components/parameters/Org'}
+      responses:
+        '200': {description: Tenant-scoped queue metrics}
+        '403': {description: Access denied}
+  /v1/organizations/{org}/jobs/{job}/retry:
+    post:
+      summary: Requeue failed dead-letter job (owner/manager)
+      parameters:
+        - {$ref: '#/components/parameters/Org'}
+        - name: job
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '202': {description: Requeued}
+        '403': {description: Access denied}
+        '404': {description: Failed job not found}

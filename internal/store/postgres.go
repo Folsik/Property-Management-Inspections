@@ -44,11 +44,26 @@ func Open(ctx context.Context, url string) (*Store, error) {
 // Migrate applies each embedded migration once. Each migration and its version
 // record commit atomically; an advisory lock serializes startup across replicas.
 func (s *Store) Migrate(ctx context.Context) error {
-	if _, err := s.DB.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+	// Bootstrap the migration table only after taking the same advisory lock used
+	// for subsequent migrations. Concurrent API/worker startup must not race
+	// PostgreSQL's implicit composite-type creation for this table.
+	bootstrap, err := s.DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin migration bootstrap: %w", err)
+	}
+	if _, err = bootstrap.Exec(ctx, `SELECT pg_advisory_xact_lock(714239817)`); err != nil {
+		_ = bootstrap.Rollback(ctx)
+		return fmt.Errorf("lock migration bootstrap: %w", err)
+	}
+	if _, err = bootstrap.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version TEXT PRIMARY KEY,
 		applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`); err != nil {
+		_ = bootstrap.Rollback(ctx)
 		return fmt.Errorf("create schema_migrations table: %w", err)
+	}
+	if err = bootstrap.Commit(ctx); err != nil {
+		return fmt.Errorf("commit migration bootstrap: %w", err)
 	}
 
 	entries, err := migrations.ReadDir("migrations")

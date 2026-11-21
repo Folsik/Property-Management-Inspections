@@ -1,11 +1,5 @@
-# Jobs
+# Durable background work
 
-Claim work in a transaction using a query shaped like:
+The implementation now lives in `runner.go`, `pipeline.go`, migrations 011–012, and the separate `cmd/worker` process. Claiming uses `SKIP LOCKED`, per-attempt UUID lease fencing, heartbeat and bounded retry/backoff. Expired final-attempt claims are moved to dead-letter; owners/managers can requeue failures through the API. Stage chaining occurs in the success acknowledgement transaction.
 
-```sql
-SELECT id FROM jobs WHERE state='pending' AND run_after <= now()
-ORDER BY run_after,created_at
-FOR UPDATE SKIP LOCKED LIMIT 1;
-```
-
-Mark running and assign a lease before committing. Reclaim expired leases with a separate policy. Workers are not yet implemented.
+For deployment settings, STT adapter contract, privacy requirements, endpoint details, recovery and known limitations, see [docs/workers-stage4.md](../../docs/workers-stage4.md). No secrets or signed URLs are stored in job payloads.
