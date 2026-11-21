@@ -27,7 +27,7 @@ const allowed=[
  /^v1\/organizations\/[0-9a-f-]{36}\/jobs\/metrics$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/jobs\/[0-9a-f-]{36}\/retry$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/transcriptions$/,
- /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/reports\/[0-9a-f-]{36}\/pdf$,
+ /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/reports\/[0-9a-f-]{36}\/pdf$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/media\/[0-9a-f-]{36}(?:\/confirm|\/download)?$/,
 ];
 async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
