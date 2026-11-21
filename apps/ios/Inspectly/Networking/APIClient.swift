@@ -19,14 +19,30 @@ actor APIClient {
             self.configurationValid = false
             self.decoder = JSONDecoder()
             self.decoder.keyDecodingStrategy = .convertFromSnakeCase
-            self.decoder.dateDecodingStrategy = .iso8601
+            self.decoder.dateDecodingStrategy = .custom { decoder in
+            let value = try decoder.singleValueContainer().decode(String.self)
+            let withFractions = ISO8601DateFormatter()
+            withFractions.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = withFractions.date(from: value) { return date }
+            let plain = ISO8601DateFormatter()
+            if let date = plain.date(from: value) { return date }
+            throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "Invalid server timestamp")
+        }
             return
         }
         self.baseURL = url
         self.configurationValid = !url.host!.hasSuffix(".invalid")
         self.decoder = JSONDecoder()
         self.decoder.keyDecodingStrategy = .convertFromSnakeCase
-        self.decoder.dateDecodingStrategy = .iso8601
+        self.decoder.dateDecodingStrategy = .custom { decoder in
+            let value = try decoder.singleValueContainer().decode(String.self)
+            let withFractions = ISO8601DateFormatter()
+            withFractions.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = withFractions.date(from: value) { return date }
+            let plain = ISO8601DateFormatter()
+            if let date = plain.date(from: value) { return date }
+            throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "Invalid server timestamp")
+        }
     }
 
     private let configurationValid: Bool
@@ -208,17 +224,17 @@ actor APIClient {
 
     func properties(in organizationID: String) async throws -> [PropertyRecord] {
         guard validUUID(organizationID) else { throw APIError.invalidConfiguration }
-        return try await paginate("v1/organizations/\\(organizationID)/properties")
+        return try await paginate("v1/organizations/\(organizationID)/properties")
     }
 
     func inspections(in organizationID: String) async throws -> [InspectionRecord] {
         guard validUUID(organizationID) else { throw APIError.invalidConfiguration }
-        return try await paginate("v1/organizations/\\(organizationID)/inspections")
+        return try await paginate("v1/organizations/\(organizationID)/inspections")
     }
 
     func items(in organizationID: String, inspectionID: String) async throws -> [InspectionItemRecord] {
         guard validUUID(organizationID), validUUID(inspectionID) else { throw APIError.invalidConfiguration }
-        return try await paginate("v1/organizations/\\(organizationID)/inspections/\\(inspectionID)/items")
+        return try await paginate("v1/organizations/\(organizationID)/inspections/\(inspectionID)/items")
     }
 
     func createProperty(in organizationID: String, named name: String) async throws {
@@ -226,7 +242,7 @@ actor APIClient {
             throw APIError.invalidConfiguration
         }
         let body = try encode(["name": name])
-        _ = try await authenticated("v1/organizations/\\(organizationID)/properties", method: "POST", body: body)
+        _ = try await authenticated("v1/organizations/\(organizationID)/properties", method: "POST", body: body)
     }
 
     func createInspection(in organizationID: String, propertyID: String, type: String) async throws {
@@ -235,21 +251,21 @@ actor APIClient {
             throw APIError.invalidConfiguration
         }
         let body = try encode(["property_id": propertyID, "type": type])
-        _ = try await authenticated("v1/organizations/\\(organizationID)/inspections", method: "POST", body: body)
+        _ = try await authenticated("v1/organizations/\(organizationID)/inspections", method: "POST", body: body)
     }
 
     func createItem(in organizationID: String, inspectionID: String, title: String, notes: String, severity: String, clientID: UUID) async throws {
         guard validUUID(organizationID), validUUID(inspectionID) else { throw APIError.invalidConfiguration }
         let body = try encode(["client_id": clientID.uuidString.lowercased(), "title": title,
                                "notes": notes, "severity": severity])
-        _ = try await authenticated("v1/organizations/\\(organizationID)/inspections/\\(inspectionID)/items", method: "POST", body: body)
+        _ = try await authenticated("v1/organizations/\(organizationID)/inspections/\(inspectionID)/items", method: "POST", body: body)
     }
 
     func updateItem(in organizationID: String, inspectionID: String, itemID: String, version: Int64, status: String) async throws {
         guard validUUID(organizationID), validUUID(inspectionID), validUUID(itemID),
               ["open", "in_progress", "resolved"].contains(status) else { throw APIError.invalidConfiguration }
         let body = try JSONSerialization.data(withJSONObject: ["version": version, "status": status])
-        _ = try await authenticated("v1/organizations/\\(organizationID)/inspections/\\(inspectionID)/items/\\(itemID)", method: "PATCH", body: body)
+        _ = try await authenticated("v1/organizations/\(organizationID)/inspections/\(inspectionID)/items/\(itemID)", method: "PATCH", body: body)
     }
 
     func profile() async throws -> UserProfile {
