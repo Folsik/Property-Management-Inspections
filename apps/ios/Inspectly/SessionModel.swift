@@ -60,6 +60,32 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    func requestOTP(phone: String) async throws -> String? {
+        try await client.requestOTP(phone: phone)
+    }
+
+    func verifyOTP(phone: String, code: String) async throws {
+        try await client.verifyOTP(phone: phone, code: code)
+    }
+
+    func finishRegistration(password: String) async throws {
+        try await client.createPassword(password)
+        profile = try await client.profile()
+        isSignedIn = true
+        await loadOrganizations()
+    }
+
+    func createOrganization(name: String) async -> Bool {
+        do {
+            try await client.createOrganization(named: name)
+            await loadOrganizations()
+            return true
+        } catch {
+            message = error.localizedDescription
+            return false
+        }
+    }
+
     func signOut() async {
         isBusy = true
         defer { isBusy = false }
