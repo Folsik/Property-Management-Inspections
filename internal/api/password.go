@@ -231,6 +231,9 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 401, "invalid credentials")
 		return
 	}
+	if !s.limitIdentifier(w, r, "password-login", identifier, 20, 10*time.Minute) {
+		return
+	}
 	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		fail(w, 503, "unavailable")

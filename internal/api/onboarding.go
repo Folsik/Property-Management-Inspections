@@ -52,6 +52,9 @@ func (s *Server) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid email")
 		return
 	}
+	if !s.limitIdentifier(w, r, "email-request", email, 5, 15*time.Minute) {
+		return
+	}
 	var count int
 	err := s.db.QueryRow(r.Context(), `SELECT count(*) FROM email_challenges WHERE user_id=$1 AND created_at > now()-interval '15 minutes'`, who(r).UserID).Scan(&count)
 	if err != nil {
@@ -136,6 +139,9 @@ func (s *Server) verifyEmailOTP(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "invalid code")
 			return
 		}
+	}
+	if !s.limitIdentifier(w, r, "email-verify", email, 20, 10*time.Minute) {
+		return
 	}
 	tx, err := s.db.Begin(r.Context())
 	if err != nil {

@@ -45,6 +45,9 @@ func (s *Server) requestPasswordRecovery(w http.ResponseWriter, r *http.Request)
 		fail(w, 400, "invalid email")
 		return
 	}
+	if !s.limitIdentifier(w, r, "recovery-request", email, 5, 30*time.Minute) {
+		return
+	}
 	if !recoveryReady(s.env) {
 		fail(w, 503, "password recovery temporarily unavailable")
 		return

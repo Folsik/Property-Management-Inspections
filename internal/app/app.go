@@ -66,6 +66,9 @@ func Run() error {
 	}
 
 	service := api.New(db.DB, tokens, logger, cfg.Env)
+	if err := service.ConfigureTrustedBFF(cfg.TrustedBFFSecret); err != nil {
+		return err
+	}
 	// Periodic garbage collection of abandoned or invalid media, bounded and
 	// resumable. Per-row SKIP LOCKED prevents duplicate work across replicas.
 	go func() {
