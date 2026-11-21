@@ -10,12 +10,19 @@ struct RootView: View {
     @State private var newOrganizationCountry = "GB"
     @State private var newOrganizationKind = "company"
     @State private var isCreatingOrganization = false
+    @State private var activeOrganization: Organization?
 
     var body: some View {
         Group {
             if session.isSignedIn {
-                NavigationStack {
-                    organizationPicker
+                if let activeOrganization {
+                    WorkspaceView(organization: activeOrganization, api: session.api) {
+                        self.activeOrganization = nil
+                    }
+                } else {
+                    NavigationStack {
+                        organizationPicker
+                    }
                 }
             } else {
                 NavigationStack {
@@ -101,9 +108,8 @@ struct RootView: View {
                     Label("Create organization", systemImage: "plus.circle.fill")
                 }
                 ForEach(session.organizations) { org in
-                    NavigationLink {
-                        WorkspaceView(organization: org, api: session.api)
-                            .navigationBarBackButtonHidden(false)
+                    Button {
+                        activeOrganization = org
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: org.kind == "individual" ? "person.crop.square" : "building.2")
