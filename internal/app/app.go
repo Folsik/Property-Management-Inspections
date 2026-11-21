@@ -90,6 +90,25 @@ func Run() error {
 			}
 		}
 	}()
+	go func() {
+		tick := time.NewTicker(5 * time.Minute)
+		defer tick.Stop()
+		for {
+			runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			count, err := service.CleanupExpiredAuth(runCtx)
+			cancel()
+			if err != nil {
+				logger.Error("auth cleanup failed", "error", err)
+			} else if count > 0 {
+				logger.Info("expired auth records cleaned", "count", count)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
+		}
+	}()
 	handler := service.Handler()
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr, Handler: handler,
