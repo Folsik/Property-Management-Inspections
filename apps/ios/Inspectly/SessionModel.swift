@@ -76,9 +76,9 @@ final class SessionModel: ObservableObject {
         await loadOrganizations()
     }
 
-    func createOrganization(name: String) async -> Bool {
+    func createOrganization(name: String, country: String, kind: String) async -> Bool {
         do {
-            try await client.createOrganization(named: name)
+            try await client.createOrganization(named: name, country: country, kind: kind)
             await loadOrganizations()
             return true
         } catch {
