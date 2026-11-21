@@ -7,6 +7,8 @@ struct RootView: View {
     @State private var showRegistration = false
     @State private var showOrganizationCreation = false
     @State private var newOrganizationName = ""
+    @State private var newOrganizationCountry = "GB"
+    @State private var newOrganizationKind = "company"
     @State private var isCreatingOrganization = false
 
     var body: some View {
@@ -139,6 +141,13 @@ struct RootView: View {
                 Form {
                     TextField("Organization name", text: $newOrganizationName)
                         .textInputAutocapitalization(.words)
+                    TextField("Country code (ISO 3166-1, e.g. GB)", text: $newOrganizationCountry)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                    Picker("Type", selection: $newOrganizationKind) {
+                        Text("Company").tag("company")
+                        Text("Individual").tag("individual")
+                    }
                     if let message = session.message {
                         Text(message).foregroundStyle(.red)
                     }
@@ -153,12 +162,12 @@ struct RootView: View {
                         Button("Create") {
                             isCreatingOrganization = true
                             Task {
-                                let created = await session.createOrganization(name: newOrganizationName)
+                                let created = await session.createOrganization(name: newOrganizationName, country: newOrganizationCountry.uppercased(), kind: newOrganizationKind)
                                 isCreatingOrganization = false
                                 if created { showOrganizationCreation = false }
                             }
                         }
-                        .disabled(newOrganizationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreatingOrganization)
+                        .disabled(newOrganizationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newOrganizationCountry.count != 2 || isCreatingOrganization)
                     }
                 }
             }
