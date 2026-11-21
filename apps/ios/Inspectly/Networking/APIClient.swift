@@ -289,11 +289,13 @@ actor APIClient {
         _ = try await authenticated("v1/auth/password", method: "POST", body: body)
     }
 
-    func createOrganization(named name: String) async throws {
-        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    func createOrganization(named name: String, country: String, kind: String) async throws {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              country.count == 2, country.allSatisfy({ $0.isASCII && $0.isLetter }),
+              ["company", "individual"].contains(kind) else {
             throw APIError.invalidConfiguration
         }
-        let body = try encode(["name": name, "country": "GB", "kind": "company"])
+        let body = try encode(["name": name, "country": country.uppercased(), "kind": kind])
         _ = try await authenticated("v1/organizations", method: "POST", body: body)
     }
 
