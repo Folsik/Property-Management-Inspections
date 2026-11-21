@@ -4,6 +4,10 @@ struct RootView: View {
     @EnvironmentObject private var session: SessionModel
     @State private var identifier = ""
     @State private var password = ""
+    @State private var showRegistration = false
+    @State private var showOrganizationCreation = false
+    @State private var newOrganizationName = ""
+    @State private var isCreatingOrganization = false
 
     var body: some View {
         Group {
@@ -57,7 +61,8 @@ struct RootView: View {
                 .disabled(session.isBusy || identifier.isEmpty || password.isEmpty)
             }
             Section {
-                Text("Use an existing account created in the web application. Phone OTP registration will be added in the next iOS increment.")
+                Button("Create an account") { showRegistration = true }
+                Text("Phone verification is required for registration.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -68,6 +73,10 @@ struct RootView: View {
             }
         }
         .navigationTitle("Inspectly")
+        .sheet(isPresented: $showRegistration) {
+            RegistrationView()
+                .environmentObject(session)
+        }
     }
 
     private func signInNow() async {
@@ -83,6 +92,12 @@ struct RootView: View {
                     .listRowBackground(Color.clear)
             }
             Section("Organizations") {
+                Button {
+                    showOrganizationCreation = true
+                    newOrganizationName = ""
+                } label: {
+                    Label("Create organization", systemImage: "plus.circle.fill")
+                }
                 ForEach(session.organizations) { org in
                     NavigationLink {
                         WorkspaceView(organization: org, api: session.api)
@@ -119,6 +134,35 @@ struct RootView: View {
         }
         .navigationTitle("Workspaces")
         .refreshable { await session.loadOrganizations() }
+        .sheet(isPresented: $showOrganizationCreation) {
+            NavigationStack {
+                Form {
+                    TextField("Organization name", text: $newOrganizationName)
+                        .textInputAutocapitalization(.words)
+                    if let message = session.message {
+                        Text(message).foregroundStyle(.red)
+                    }
+                }
+                .navigationTitle("New organization")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showOrganizationCreation = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Create") {
+                            isCreatingOrganization = true
+                            Task {
+                                let created = await session.createOrganization(name: newOrganizationName)
+                                isCreatingOrganization = false
+                                if created { showOrganizationCreation = false }
+                            }
+                        }
+                        .disabled(newOrganizationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreatingOrganization)
+                    }
+                }
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Refresh", systemImage: "arrow.clockwise") {
