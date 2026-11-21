@@ -1,6 +1,11 @@
 import Foundation
 import Security
 
+struct OTPChallenge: Decodable {
+    let status: String
+    let devCode: String?
+}
+
 struct AuthPair: Decodable {
     let accessToken: String
     let refreshToken: String
