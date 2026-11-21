@@ -9,6 +9,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var properties: [PropertyRecord] = []
     @Published private(set) var inspections: [InspectionRecord] = []
     @Published private(set) var items: [InspectionItemRecord] = []
+    @Published private(set) var media: [InspectionMedia] = []
     @Published private(set) var isLoading = false
     @Published private(set) var message: String?
     @Published private(set) var hasLoaded = false
@@ -92,6 +93,41 @@ final class WorkspaceModel: ObservableObject {
             await loadItems(inspectionID: inspectionID)
             return false
         }
+    }
+
+    func loadMedia(inspectionID: String) async {
+        do {
+            media = try await api.media(in: organization.id, inspectionID: inspectionID)
+            message = nil
+        } catch {
+            message = error.localizedDescription
+        }
+    }
+
+    func uploadMedia(inspectionID: String, file: URL, mime: String) async -> Bool {
+        do {
+            try await api.uploadMedia(in: organization.id, inspectionID: inspectionID, file: file, mime: mime)
+            await loadMedia(inspectionID: inspectionID)
+            return true
+        } catch {
+            message = error.localizedDescription
+            return false
+        }
+    }
+
+    func transcribe(inspectionID: String, mediaID: String) async -> Bool {
+        do {
+            try await api.requestTranscription(in: organization.id, inspectionID: inspectionID, mediaID: mediaID)
+            message = nil
+            return true
+        } catch {
+            message = error.localizedDescription
+            return false
+        }
+    }
+
+    func report(inspectionID: String, mediaID: String) async throws -> Data {
+        try await api.generatedReport(in: organization.id, inspectionID: inspectionID, mediaID: mediaID)
     }
 
     func clearMessage() { message = nil }
