@@ -300,6 +300,13 @@ struct InspectionDetailView: View {
                 LabeledContent("Type", value: inspection.displayType)
                 LabeledContent("Status", value: inspection.status.capitalized)
             }
+            Section("Media") {
+                NavigationLink {
+                    InspectionMediaView(model: model, inspection: inspection)
+                } label: {
+                    Label("Photos, voice notes & reports", systemImage: "photo.on.rectangle.angled")
+                }
+            }
             Section("Inspection items") {
                 if model.items.isEmpty { Text("No items yet").foregroundStyle(.secondary) }
                 ForEach(model.items) { item in
