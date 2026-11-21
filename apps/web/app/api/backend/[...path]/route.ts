@@ -88,6 +88,7 @@ async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>
  const result=new NextResponse(text,{status:response.status,headers:{
   "Content-Type":response.headers.get("content-type")||"application/json",
   "Cache-Control":"no-store",
+  ...(response.headers.get("Retry-After")?{"Retry-After":response.headers.get("Retry-After")!}:{}),
  }});
  return pair?setAuthCookies(result,pair):result;
 }

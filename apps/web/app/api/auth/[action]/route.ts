@@ -52,7 +52,10 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
   "Content-Type":"application/json","User-Agent":req.headers.get("user-agent")||"Inspectly Web"
  }},req.headers);
  const data=await result.json().catch(()=>({error:"Unexpected backend response"}));
- if(!result.ok)return NextResponse.json(data,{status:result.status});
+ if(!result.ok){
+  const retry=result.headers.get("Retry-After");
+  return NextResponse.json(data,{status:result.status,headers:{"Cache-Control":"no-store",...(retry?{"Retry-After":retry}:{})}});
+ }
  if(action==="request"){
   const host=req.headers.get("host")||"";
   const local=process.env.WEB_LOCAL_OTP==="true"&&["localhost","127.0.0.1"].includes(new URL("http://"+host).hostname);
