@@ -16,7 +16,7 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
   // Failure to reach Go must not falsely claim that the device was signed out.
   let fresh=null;
   if(refresh){
-   const renewal=await renewSession(refresh);
+   const renewal=await renewSession(refresh,req.headers);
    if(renewal.status==="unavailable")return NextResponse.json({error:"Unable to revoke session right now"},{status:503});
    if(renewal.status==="ok")fresh=renewal.pair;
   }
@@ -24,12 +24,12 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
    const revoked=await fetchBackend("v1/auth/refresh/logout",{
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({refresh_token:fresh.refresh_token})
-   });
+   },req.headers);
    if(!revoked.ok && revoked.status>=500){
     return setAuthCookies(NextResponse.json({error:"Unable to revoke session right now"},{status:503}),fresh);
    }
   }else if(access){
-   const revoked=await fetchBackend("v1/auth/logout",{method:"POST",headers:{"Authorization":"Bearer "+access}});
+   const revoked=await fetchBackend("v1/auth/logout",{method:"POST",headers:{"Authorization":"Bearer "+access}},req.headers);
    if(!revoked.ok && revoked.status>=500){
     return NextResponse.json({error:"Unable to revoke session right now"},{status:503});
    }
@@ -38,7 +38,7 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
  }
  if(action==="refresh"){
   const refresh=req.cookies.get("inspectly_refresh")?.value;
-  const renewal=refresh?await renewSession(refresh):{status:"expired" as const};
+  const renewal=refresh?await renewSession(refresh,req.headers):{status:"expired" as const};
   if(renewal.status==="unavailable")return NextResponse.json({error:"Authentication temporarily unavailable"},{status:503});
   if(renewal.status!=="ok")return clearAuthCookies(NextResponse.json({error:"Session expired"},{status:401}));
   return setAuthCookies(NextResponse.json({ok:true}),renewal.pair);
@@ -50,7 +50,7 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{action:stri
  catch{return NextResponse.json({error:"Invalid payload"},{status:400});}
  const result=await fetchBackend("v1/auth/"+backendRoute,{method:"POST",body,headers:{
   "Content-Type":"application/json","User-Agent":req.headers.get("user-agent")||"Inspectly Web"
- }});
+ }},req.headers);
  const data=await result.json().catch(()=>({error:"Unexpected backend response"}));
  if(!result.ok)return NextResponse.json(data,{status:result.status});
  if(action==="request"){
