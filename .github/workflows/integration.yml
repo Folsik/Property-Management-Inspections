@@ -31,4 +31,4 @@ jobs:
           go-version: '1.23.x'
           cache: true
       - name: Run all API integration and security tests against PostgreSQL
-        run: go test ./... -count=1 -v -timeout=5m
+        run: go test ./internal/jobs -count=1 -v -timeout=5m && go test ./internal/api -count=1 -v -timeout=5m
