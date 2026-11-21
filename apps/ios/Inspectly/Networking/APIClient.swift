@@ -299,6 +299,64 @@ actor APIClient {
         _ = try await authenticated("v1/organizations", method: "POST", body: body)
     }
 
+    func media(in organizationID: String, inspectionID: String) async throws -> [InspectionMedia] {
+        guard validUUID(organizationID), validUUID(inspectionID) else { throw APIError.invalidConfiguration }
+        return try await paginate("v1/organizations/\(organizationID)/inspections/\(inspectionID)/media")
+    }
+
+    func uploadMedia(in organizationID: String, inspectionID: String, file: URL, mime: String) async throws {
+        guard validUUID(organizationID), validUUID(inspectionID),
+              ["image/jpeg", "image/png", "image/heic", "audio/mp4", "audio/mpeg"].contains(mime) else {
+            throw APIError.invalidConfiguration
+        }
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        guard let size = attributes[.size] as? NSNumber,
+              size.int64Value > 0, size.int64Value <= 50 * 1024 * 1024 else {
+            throw APIError.invalidResponse
+        }
+        let root = "v1/organizations/\(organizationID)/inspections/\(inspectionID)/media"
+        let payload = try JSONSerialization.data(withJSONObject: [
+            "mime_type": mime, "size_bytes": size.int64Value
+        ])
+        let ticketData = try await authenticated(root + "/presign", method: "POST", body: payload)
+        let ticket = try decoder.decode(MediaUploadTicket.self, from: ticketData)
+        guard validUUID(ticket.id), ticket.method == "PUT",
+              ticket.uploadUrl.scheme == "https", ticket.uploadUrl.host != nil,
+              ticket.expiresInSeconds > 0 else { throw APIError.invalidResponse }
+
+        var request = URLRequest(url: ticket.uploadUrl)
+        request.httpMethod = "PUT"
+        request.timeoutInterval = 120
+        // Signed Content-Type must match exactly; no app Authorization header on S3.
+        guard ticket.headers["Content-Type"] == mime else { throw APIError.invalidResponse }
+        request.setValue(mime, forHTTPHeaderField: "Content-Type")
+        let (_, raw) = try await session.upload(for: request, fromFile: file)
+        guard let response = raw as? HTTPURLResponse,
+              (200...299).contains(response.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        // A successful PUT alone is NOT complete; backend HEAD and signature checks
+        // must succeed and move bytes into immutable verified storage.
+        _ = try await authenticated(root + "/\(ticket.id)/confirm", method: "POST")
+    }
+
+    func requestTranscription(in organizationID: String, inspectionID: String, mediaID: String) async throws {
+        guard validUUID(organizationID), validUUID(inspectionID), validUUID(mediaID) else {
+            throw APIError.invalidConfiguration
+        }
+        let root = "v1/organizations/\(organizationID)/inspections/\(inspectionID)"
+        let payload = try encode(["media_id": mediaID, "idempotency_key": mediaID])
+        _ = try await authenticated(root + "/transcriptions", method: "POST", body: payload)
+    }
+
+    func generatedReport(in organizationID: String, inspectionID: String, mediaID: String) async throws -> Data {
+        guard validUUID(organizationID), validUUID(inspectionID), validUUID(mediaID) else {
+            throw APIError.invalidConfiguration
+        }
+        let path = "v1/organizations/\(organizationID)/inspections/\(inspectionID)/reports/\(mediaID)/pdf"
+        return try await authenticated(path)
+    }
+
     func profile() async throws -> UserProfile {
         let data = try await authenticated("v1/me")
         return try decoder.decode(UserProfile.self, from: data)
