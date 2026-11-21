@@ -268,6 +268,35 @@ actor APIClient {
         _ = try await authenticated("v1/organizations/\(organizationID)/inspections/\(inspectionID)/items/\(itemID)", method: "PATCH", body: body)
     }
 
+    func requestOTP(phone: String) async throws -> String? {
+        let body = try encode(["phone": phone])
+        let (data, response) = try await transport("v1/auth/otp/request", method: "POST", body: body)
+        guard response.statusCode == 202 else { throw APIError.server(response.statusCode) }
+        let decoded = try decoder.decode(OTPChallenge.self, from: data)
+        return decoded.devCode
+    }
+
+    func verifyOTP(phone: String, code: String) async throws {
+        let body = try encode(["phone": phone, "code": code])
+        let (data, response) = try await transport("v1/auth/otp/verify", method: "POST", body: body)
+        guard response.statusCode == 200 else { throw APIError.server(response.statusCode) }
+        let pair = try decoder.decode(AuthPair.self, from: data)
+        try persist(pair)
+    }
+
+    func createPassword(_ password: String) async throws {
+        let body = try encode(["password": password])
+        _ = try await authenticated("v1/auth/password", method: "POST", body: body)
+    }
+
+    func createOrganization(named name: String) async throws {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw APIError.invalidConfiguration
+        }
+        let body = try encode(["name": name, "country": "GB", "kind": "company"])
+        _ = try await authenticated("v1/organizations", method: "POST", body: body)
+    }
+
     func profile() async throws -> UserProfile {
         let data = try await authenticated("v1/me")
         return try decoder.decode(UserProfile.self, from: data)
