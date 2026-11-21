@@ -3,8 +3,10 @@ import SwiftUI
 struct WorkspaceView: View {
     @StateObject private var model: WorkspaceModel
     @EnvironmentObject private var session: SessionModel
+    let onSwitchWorkspace: () -> Void
 
-    init(organization: Organization, api: APIClient) {
+    init(organization: Organization, api: APIClient, onSwitchWorkspace: @escaping () -> Void) {
+        self.onSwitchWorkspace = onSwitchWorkspace
         _model = StateObject(wrappedValue: WorkspaceModel(organization: organization, api: api))
     }
 
