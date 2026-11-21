@@ -44,7 +44,7 @@ func Open(ctx context.Context, url string) (*Store, error) {
 // Migrate applies each embedded migration once. Each migration and its version
 // record commit atomically; an advisory lock serializes startup across replicas.
 func (s *Store) Migrate(ctx context.Context) error {
- 	// Bootstrap the migration table only after taking the same advisory lock used
+	// Bootstrap the migration table only after taking the same advisory lock used
 	// for subsequent migrations. Concurrent API/worker startup must not race
 	// PostgreSQL's implicit composite-type creation for this table.
 	bootstrap, err := s.DB.Begin(ctx)
