@@ -1,0 +1,30 @@
+name: iOS SwiftUI build
+on:
+  push:
+    branches: [feat/ios-foundation]
+    paths:
+      - "apps/ios/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "apps/ios/**"
+      - ".github/workflows/ios.yml"
+permissions:
+  contents: read
+jobs:
+  simulator-build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+        working-directory: apps/ios
+      - name: Compile iOS simulator application (no signing)
+        run: |
+          xcodebuild -project Inspectly.xcodeproj -scheme Inspectly \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build
+        working-directory: apps/ios

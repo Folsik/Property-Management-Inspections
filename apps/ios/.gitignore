@@ -1,0 +1,5 @@
+Inspectly.xcodeproj/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+.build/
