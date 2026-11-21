@@ -184,6 +184,19 @@ func TestPostgresSmoke(t *testing.T) {
 	loginToken := pinLogin["access_token"].(string)
 	call("POST", "/v1/auth/logout", loginToken, map[string]any{}, 200)
 	call("GET", "/v1/me", loginToken, nil, 401)
+	// A previously issued capability must never expose soft-deleted rows.
+	liveLink := call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/share", owner, map[string]any{}, 201)["token"].(string)
+	if _, err := db.DB.Exec(ctx, "UPDATE inspection_items SET deleted_at=now() WHERE id=$1", itemID); err != nil {
+		t.Fatal(err)
+	}
+	filtered := call("GET", "/v1/public/reports/"+liveLink, "", nil, 200)
+	if len(filtered["items"].([]any)) != 0 {
+		t.Fatalf("deleted item exposed: %#v", filtered)
+	}
+	if _, err := db.DB.Exec(ctx, "UPDATE inspections SET deleted_at=now() WHERE id=$1", inspection); err != nil {
+		t.Fatal(err)
+	}
+	call("GET", "/v1/public/reports/"+liveLink, "", nil, 404)
 	if strings.TrimSpace(org) == "" {
 		t.Fatal("missing org")
 	}

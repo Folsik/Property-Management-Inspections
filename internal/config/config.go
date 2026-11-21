@@ -20,7 +20,7 @@ func Load() Config {
 		ttl = 15 * time.Minute
 	}
 	return Config{
-		Env:            get("APP_ENV", "development"),
+		Env:            environment(),
 		HTTPAddr:       get("HTTP_ADDR", ":8080"),
 		DatabaseURL:    get("DATABASE_URL", "postgres://inspections:inspections_dev_password@localhost:5432/inspections?sslmode=disable"),
 		JWTIssuer:      get("JWT_ISSUER", "inspections-api"),
@@ -34,4 +34,12 @@ func get(k, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// Only an explicit development value enables development credentials and OTPs.
+func environment() string {
+	if os.Getenv("APP_ENV") == "development" {
+		return "development"
+	}
+	return "production"
 }
