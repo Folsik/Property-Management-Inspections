@@ -135,11 +135,13 @@ actor APIClient {
     }
 
     func profile() async throws -> UserProfile {
-        try decoder.decode(UserProfile.self, from: authenticated("v1/me"))
+        let data = try await authenticated("v1/me")
+        return try decoder.decode(UserProfile.self, from: data)
     }
 
     func organizations() async throws -> [Organization] {
-        try decoder.decode(OrganizationList.self, from: authenticated("v1/organizations")).items
+        let data = try await authenticated("v1/organizations")
+        return try decoder.decode(OrganizationList.self, from: data).items
     }
 
     func signOut() async throws {
