@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 struct AuthPair: Decodable {
     let accessToken: String
