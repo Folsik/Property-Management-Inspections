@@ -59,7 +59,7 @@ struct RootView: View {
     private var home: some View {
         List {
             Section("Account") {
-                Text(session.profile?.fullName.isEmpty == false ? session.profile!.fullName : "Signed in")
+                Text(session.profile?.fullName.isEmpty == false ? (session.profile?.fullName ?? "Signed in") : "Signed in")
                 if let phone = session.profile?.phone { Text(phone).foregroundStyle(.secondary) }
             }
             Section("Organizations") {
