@@ -28,7 +28,7 @@ The project is generated, not checked in; source of truth is `project.yml`. GitH
 - Camera and voice notes using the existing verified S3 presign → PUT → confirm contract, with persisted iOS background tasks.
 - PDF preview, accessibility, localization, Face ID convenience unlock and structured telemetry.
 
-The current sprint has phone signup and online property/inspection workflows. It does **not** yet include offline sync, camera/media capture, full email/invitation onboarding, push notifications or App Store delivery. Do not enable production service endpoints or ship without testing in Xcode and on devices.
+The current sprint has phone signup and online property/inspection workflows. It does **not** yet include offline sync, durable background media queue, full email/invitation onboarding, push notifications or App Store delivery. Do not enable production service endpoints or ship without testing in Xcode and on devices.
 
 References: [mobile API](../../docs/api-v1-mobile.md), [device sessions](../../docs/auth-sessions.md), [media lifecycle](../../docs/media-lifecycle.md).
 
@@ -39,3 +39,13 @@ The XcodeGen spec declares Swift 5.9 language mode and iOS 17 as a minimum deplo
 The local API default is `http://localhost:8080`, valid **only in the simulator running on the same Mac as Docker/Go**. On a real iPhone, `localhost` points at the phone. Use a reachable HTTPS origin and update `InspectlyAPIBaseURL` in the XcodeGen build configuration, then regenerate the project. Production uses a deliberately invalid placeholder until a trusted deployment address is configured.
 
 There are no fabricated demo records: the lists come from authenticated Go endpoints. A missing tenant or property is represented by an empty state. The account created through phone OTP requires the production Twilio provider in nondevelopment deployments; local dev API may return a test OTP for simulator use only.
+
+## Native media in inspection details
+
+- **Photos:** native PhotosPicker and system camera, converted to JPEG before upload to strip incidental image metadata. Camera capture requires device camera permission; the simulator has no camera hardware.
+- **Voice:** AVAudioRecorder outputs local AAC/M4A (`audio/mp4`), subject to microphone permission. A failed voice upload keeps the local temporary recording for in-app retry. The current prototype does not provide a permanent offline media queue and does not guarantee survival of OS temporary-folder cleanup.
+- **Upload:** authenticated Go `presign` returns a short-lived HTTPS URL, iOS issues a file-based PUT to S3/R2 with the exact signed Content-Type header, then calls backend `confirm` to verify and finalize the immutable object. The application never embeds S3 access credentials.
+- **Processing:** authenticated audio action queues transcription with `media_id` as the stable idempotency key, followed by server-side extraction and PDF creation; PDFKit previews generated reports. Storage and STT provider credentials **must be configured in backend**. Until configured, uploads or transcription can return HTTP 503, and PDF may not yet exist.
+- **Important limitation:** the current file upload uses foreground `URLSession.upload(for:fromFile:)`. A persisted background URLSession uploader with full offline retry/resume and a durable queue is the next native reliability milestone; do not claim foreground uploads survive app termination.
+
+Camera capture and microphone work on supported real devices. Manual Xcode 26.2 testing (device permissions, app suspension, invalid/expired S3 tickets, media of 50MiB+, malformed recordings, and server-side tenant isolation) is still required before promotion to `main`.
