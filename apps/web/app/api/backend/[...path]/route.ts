@@ -24,6 +24,10 @@ const allowed=[
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/(items|media|media\/presign)$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/items\/[0-9a-f-]{36}$/,
  /^v1\/organizations\/[0-9a-f-]{36}\/sync\/(pull|push)$/,
+ /^v1\/organizations\/[0-9a-f-]{36}\/jobs\/metrics$/,
+ /^v1\/organizations\/[0-9a-f-]{36}\/jobs\/[0-9a-f-]{36}\/retry$/,
+ /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/transcriptions$/,
+ /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/reports\/[0-9a-f-]{36}\/pdf$,
  /^v1\/organizations\/[0-9a-f-]{36}\/inspections\/[0-9a-f-]{36}\/media\/[0-9a-f-]{36}(?:\/confirm|\/download)?$/,
 ];
 async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
@@ -62,6 +66,19 @@ async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>
   response=await invoke(pair.access_token);
  }
  if(!response)return NextResponse.json({error:"Unauthorized"},{status:401});
+ // PDF reports are binary; response.text() would corrupt bytes above ASCII.
+ const isPDF=target.endsWith("/pdf")&&response.ok&&response.headers.get("content-type")?.startsWith("application/pdf");
+ if(isPDF){
+  const bytes=await response.arrayBuffer();
+  if(bytes.byteLength>1_048_576)return NextResponse.json({error:"Report too large"},{status:502});
+  const pdf=new NextResponse(bytes,{status:response.status,headers:{
+   "Content-Type":"application/pdf",
+   "Content-Disposition":"attachment; filename=inspection-report.pdf",
+   "X-Content-Type-Options":"nosniff",
+   "Cache-Control":"private, no-store"
+  }});
+  return pair?setAuthCookies(pdf,pair):pdf;
+ }
  let text=await response.text();
  if(target==="v1/email/request"){
   const host=req.headers.get("host")||"";
