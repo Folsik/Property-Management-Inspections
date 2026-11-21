@@ -9,7 +9,7 @@ final class SessionModel: ObservableObject {
     @Published private(set) var organizations: [Organization] = []
     @Published private(set) var message: String?
 
-    private let client = APIClient()
+    let api = APIClient()\n    private var client: APIClient { api }
     private var didRestore = false
 
     func restore() async {
