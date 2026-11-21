@@ -232,6 +232,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
+		// A crashed last-attempt worker cannot renew its lease; promote it to
+		// dead letter before claiming additional work.
+		if err := r.ReapExhausted(ctx); err != nil {
+			r.Logger.Error("job dead-letter reaper failed", "error", err)
+		}
 		processed, err := r.ProcessOne(ctx)
 		if err != nil {
 			r.Logger.Error("worker operation failed", "error", err)

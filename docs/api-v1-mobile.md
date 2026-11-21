@@ -1,6 +1,6 @@
 # Inspectly mobile API v1 — Stage 3 contract
 
-Status: **Stage 3 approved and merged to `main` via PR #11 on 2026-11-20**. Stage 4 is implemented separately in `feat/bootstrap-foundation` and remains pending verification.
+Status: **Stage 3 approved and merged to `main` via PR #11 on 2026-11-20**. Stage 4 was approved and merged to `main` via PR #12 on 2026-11-21.
 
 ## Authentication and tenancy
 
@@ -106,4 +106,4 @@ Direct `POST /inspections/{inspection}/items` with the same client_id and identi
 
 The database migration is additive (`010_mobile_sync.sql`). It backfills existing objects and increments `schema_migrations` to 10. **Branch isolation does not isolate the local PostgreSQL schema**; before running a newer branch against valuable data, take a database backup. The index and trigger changes can lock tables while migrations run; production rollout needs a maintenance window or online migration plan.
 
-This contract defines **online-first mobile readiness with an incremental offline item queue**, not general CRDT syncing of arbitrary records, conflict-free collaborative editing, automatic purge/rebuild, or a complete SwiftUI implementation. Jobs, billing, transcription and PDF processing remain separate roadmap stages.
+This contract defines **online-first mobile readiness with an incremental offline item queue**, not general CRDT syncing of arbitrary records, conflict-free collaborative editing, automatic purge/rebuild, or a complete SwiftUI implementation. Billing remains a separate roadmap stage. Worker transcription and minimal PDF generation are implemented in Stage 4; advanced AI extraction remains planned.

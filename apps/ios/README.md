@@ -1,6 +1,6 @@
 # iOS client
 
-Planned: SwiftUI offline-first inspections, photo capture, PencilKit and voice notes. Backend is authoritative; sync protocol is not yet implemented.
+Planned: SwiftUI offline-first inspections, photo capture, PencilKit and voice notes. Backend is authoritative; the Stage 3 /v1 sync contract is implemented and merged. Native SwiftUI is the next milestone.
 
 ## Authentication integration
 
@@ -12,4 +12,4 @@ Follow the documented [presign → background PUT → confirm](../../docs/media-
 
 ## Mobile data/sync integration (Stage 3)
 
-Use the [v1 mobile sync contract](../../docs/api-v1-mobile.md) for cursor-based local database replication, queued idempotent item mutations and conflict resolution. Apply each pull page and persist its next cursor in one SwiftData/SQLite transaction. Client-generated item IDs and stable mutation UUIDs survive restarts; do not silently overwrite server changes. `main` does not include Stage 3 until approval.
+Use the [v1 mobile sync contract](../../docs/api-v1-mobile.md) for cursor-based local database replication, queued idempotent item mutations and conflict resolution. Apply each pull page and persist its next cursor in one SwiftData/SQLite transaction. Client-generated item IDs and stable mutation UUIDs survive restarts; do not silently overwrite server changes. Stage 3 is present in `main` (PR #11), and the Stage 4 worker foundation is present in `main` (PR #12).
