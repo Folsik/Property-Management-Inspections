@@ -254,5 +254,6 @@ func (s *Server) completePasswordRecovery(w http.ResponseWriter, r *http.Request
 			s.logger.Error("recovery confirmation email failed", "error", err)
 		}
 	}
+	s.auditSecurityEvent(r, user, "", "auth.password_reset", "user", user)
 	write(w, 200, map[string]string{"status": "password_reset", "message": "Your password was updated. Sign in again."})
 }
