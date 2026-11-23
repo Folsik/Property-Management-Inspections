@@ -37,7 +37,7 @@ func TestPostgresSmoke(t *testing.T) {
 		t.Fatalf("idempotent database migration: %v", err)
 	}
 	var versions int
-	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 13 {
+	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 14 {
 		t.Fatalf("migration versions: count=%d err=%v", versions, err)
 	}
 	tokens, err := auth.NewManager("integration-test", 15*time.Minute)
