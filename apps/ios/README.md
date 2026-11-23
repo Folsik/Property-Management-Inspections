@@ -8,7 +8,7 @@ Native SwiftUI application targeting iOS 17+. This branch (`feat/ios-foundation`
 2. From `apps/ios`, run `xcodegen generate --spec project.yml`.
 3. Open `Inspectly.xcodeproj`, choose an iOS 17+ Simulator, and run `Inspectly`.
 4. Debug uses `http://localhost:8080`; start the existing Go API/Docker Compose service on your Mac first. On a physical iPhone, use a reachable HTTPS host, not localhost.
-5. Release currently uses the deliberate invalid placeholder `https://api.example.invalid`. Configure a real HTTPS API and signing/team settings before any distribution.
+5. Staging and Release have no default endpoint; provide the intended public HTTPS API explicitly as described in the deployment runbook.
 
 The project is generated, not checked in; source of truth is `project.yml`. GitHub Actions builds with the iOS Simulator SDK without code signing. This branch remains isolated from `main` until native CI and owner review.
 
@@ -36,7 +36,7 @@ References: [mobile API](../../docs/api-v1-mobile.md), [device sessions](../../d
 
 The XcodeGen spec declares Swift 5.9 language mode and iOS 17 as a minimum deployment target. This is intentional for compatibility and is not a requirement to use Xcode 16. Xcode 26.2 can open the generated project. Configure a Personal Team in Signing & Capabilities for on-device testing; GitHub Actions uses `CODE_SIGNING_ALLOWED=NO` only for simulator builds.
 
-The local API default is `http://localhost:8080`, valid **only in the simulator running on the same Mac as Docker/Go**. On a real iPhone, `localhost` points at the phone. Use a reachable HTTPS origin and update `InspectlyAPIBaseURL` in the XcodeGen build configuration, then regenerate the project. Production uses a deliberately invalid placeholder until a trusted deployment address is configured.
+The local API default is `http://localhost:8080`, valid **only in the simulator running on the same Mac as Docker/Go**. On a real iPhone, `localhost` points at the phone. Use the Staging configuration and explicitly inject `INSPECTLY_API_BASE_URL` at build time. Both Staging and Release fail closed without a valid HTTPS origin; no default public URL is embedded.
 
 There are no fabricated demo records: the lists come from authenticated Go endpoints. A missing tenant or property is represented by an empty state. The account created through phone OTP requires the production Twilio provider in nondevelopment deployments; local dev API may return a test OTP for simulator use only.
 
