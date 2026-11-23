@@ -18,6 +18,7 @@ jobs:
         run: |
           unformatted="$(gofmt -l $(find cmd internal -name '*.go'))"
           printf '%s\n' "$unformatted"
+          if [ -n "$unformatted" ]; then gofmt -d $unformatted; fi
           test -z "$unformatted"
       - run: go test ./...
       - run: go vet ./...
