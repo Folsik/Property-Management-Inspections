@@ -73,6 +73,7 @@ func (s *Server) issue(w http.ResponseWriter, r *http.Request, user string) {
 		fail(w, 503, "auth unavailable")
 		return
 	}
+	s.auditSecurityEvent(r, user, "", "auth.login", "auth_session", sid)
 	w.Header().Set("Cache-Control", "no-store")
 	write(w, 200, map[string]any{"access_token": access, "token_type": "Bearer", "expires_at": until,
 		"refresh_token": raw, "refresh_expires_at": expires, "session_id": sid})
