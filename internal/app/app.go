@@ -66,6 +66,7 @@ func Run() error {
 	}
 
 	service := api.New(db.DB, tokens, logger, cfg.Env)
+	service.ConfigureRefreshReplayKey(cfg.JWTPrivateKey)
 	if err := service.ConfigureTrustedBFF(cfg.TrustedBFFSecret); err != nil {
 		return err
 	}
