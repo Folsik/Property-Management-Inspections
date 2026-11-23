@@ -93,7 +93,9 @@ func (s *Server) encryptRefreshResponse(value map[string]any) ([]byte, error) {
 		return nil, err
 	}
 	nonce := make([]byte, aead.NonceSize())
-	if _, err := rand.Read(nonce); err != nil { return nil, err }
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
 	return aead.Seal(nonce, nonce, plaintext, nil), nil
 }
 
@@ -114,9 +116,12 @@ func (s *Server) decryptRefreshResponse(encrypted []byte) (map[string]any, error
 		return nil, err
 	}
 	var response map[string]any
-	if err := json.Unmarshal(plaintext, &response); err != nil { return nil, err }
+	if err := json.Unmarshal(plaintext, &response); err != nil {
+		return nil, err
+	}
 	return response, nil
 }
+
 func (s *Server) refreshAccess(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		RefreshToken string `json:"refresh_token"`
@@ -256,7 +261,6 @@ func (s *Server) refreshAccess(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "auth unavailable")
 		return
 	}
-
 	if err = tx.Commit(r.Context()); err != nil {
 		fail(w, 503, "auth unavailable")
 		return
