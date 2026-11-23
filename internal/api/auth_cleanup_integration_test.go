@@ -87,7 +87,10 @@ func TestCleanupExpiredAuthRetention(t *testing.T) {
 	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM used_refresh_tokens WHERE token_hash=$1", prefix+"expired").Scan(&expired); err != nil || expired != 0 {
 		t.Fatalf("expired refresh cleanup: count=%d err=%v", expired, err)
 	}
-	for _, row := range []struct{ suffix string; cached bool }{{"spent", false}, {"retry", true}} {
+	for _, row := range []struct {
+		suffix string
+		cached bool
+	}{{"spent", false}, {"retry", true}} {
 		var cached bool
 		err := db.DB.QueryRow(ctx, "SELECT replay_response IS NOT NULL FROM used_refresh_tokens WHERE token_hash=$1", prefix+row.suffix).Scan(&cached)
 		if err != nil || cached != row.cached {
