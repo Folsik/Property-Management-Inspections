@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,10 +29,24 @@ type Server struct {
 	env               string
 	storageHTTPClient *http.Client
 	trustedBFFSecret  string
+	refreshReplayKey  [32]byte
 }
 
 func New(db *pgxpool.Pool, tokens *auth.Manager, logger *slog.Logger, env string) *Server {
-	return &Server{db: db, tokens: tokens, logger: logger, env: env, storageHTTPClient: &http.Client{Timeout: 10 * time.Second}}
+	s := &Server{db: db, tokens: tokens, logger: logger, env: env, storageHTTPClient: &http.Client{Timeout: 10 * time.Second}}
+	// Development-only ephemeral key; production calls ConfigureRefreshReplayKey.
+	if _, err := rand.Read(s.refreshReplayKey[:]); err != nil {
+		panic("secure randomness unavailable")
+	}
+	return s
+}
+
+// ConfigureRefreshReplayKey derives a separate AEAD key from the deployment's
+// persistent private signing key. Call before serving requests on every replica.
+func (s *Server) ConfigureRefreshReplayKey(signingSecret string) {
+	if signingSecret != "" {
+		s.refreshReplayKey = sha256.Sum256([]byte("inspectly-refresh-replay-v1:" + signingSecret))
+	}
 }
 
 type key string
