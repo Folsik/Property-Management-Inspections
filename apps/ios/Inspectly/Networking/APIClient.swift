@@ -3,7 +3,7 @@ import Foundation
 // One actor owns token rotation. Concurrent requests cannot reuse a consumed
 // refresh token, which would cause the backend to revoke the device session.
 actor APIClient {
-    private let baseURL: URL
+    private let baseURL: URL?
     private let session: URLSession
     private let keychain = KeychainRefreshStore()
     private let decoder: JSONDecoder
@@ -12,26 +12,10 @@ actor APIClient {
 
     init(session: URLSession = .shared) {
         self.session = session
-        let configured = Bundle.main.object(forInfoDictionaryKey: "InspectlyAPIBaseURL") as? String ?? ""
-        guard let url = URL(string: configured), url.host != nil,
-              url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1"].contains(url.host ?? "")) else {
-            self.baseURL = URL(string: "https://invalid.example")!
-            self.configurationValid = false
-            self.decoder = JSONDecoder()
-            self.decoder.keyDecodingStrategy = .convertFromSnakeCase
-            self.decoder.dateDecodingStrategy = .custom { decoder in
-            let value = try decoder.singleValueContainer().decode(String.self)
-            let withFractions = ISO8601DateFormatter()
-            withFractions.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = withFractions.date(from: value) { return date }
-            let plain = ISO8601DateFormatter()
-            if let date = plain.date(from: value) { return date }
-            throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "Invalid server timestamp")
-        }
-            return
-        }
-        self.baseURL = url
-        self.configurationValid = !url.host!.hasSuffix(".invalid")
+        self.baseURL = EndpointConfiguration.resolve(
+            environment: Bundle.main.object(forInfoDictionaryKey: "InspectlyEnvironment") as? String,
+            value: Bundle.main.object(forInfoDictionaryKey: "InspectlyAPIBaseURL") as? String
+        )
         self.decoder = JSONDecoder()
         self.decoder.keyDecodingStrategy = .convertFromSnakeCase
         self.decoder.dateDecodingStrategy = .custom { decoder in
@@ -45,10 +29,8 @@ actor APIClient {
         }
     }
 
-    private let configurationValid: Bool
-
     private func url(_ path: String) throws -> URL {
-        guard configurationValid else { throw APIError.invalidConfiguration }
+        guard let baseURL else { throw APIError.invalidConfiguration }
         guard path.hasPrefix("v1/"), !path.contains(".."), !path.contains("?") else {
             throw APIError.invalidConfiguration
         }
