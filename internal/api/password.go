@@ -236,8 +236,9 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	// Argon2 and bcrypt are never computed while holding a row lock.
 	var id, hash string
-	err := s.db.QueryRow(r.Context(), `SELECT id,coalesce(password_hash,'') FROM users
- WHERE phone=$1 OR (lower(email)=$1 AND email_verified_at IS NOT NULL)`, identifier).Scan(&id, &hash)
+	var nextAttempt *time.Time
+	err := s.db.QueryRow(r.Context(), `SELECT id,coalesce(password_hash,''),password_locked_until FROM users
+ WHERE phone=$1 OR (lower(email)=$1 AND email_verified_at IS NOT NULL)`, identifier).Scan(&id, &hash, &nextAttempt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = verifyPassword(dummyPasswordHash, in.Password)
 		fail(w, 401, "invalid credentials")
@@ -248,6 +249,10 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hash == "" || !verifyPassword(hash, in.Password) {
+		if nextAttempt != nil && nextAttempt.After(time.Now()) {
+			fail(w, 401, "invalid credentials")
+			return
+		}
 		// Short bounded progressive backoff; a correct password is always allowed.
 		// Do not disclose account existence or lockout state in HTTP responses.
 		_, err = s.db.Exec(r.Context(), `UPDATE users SET
