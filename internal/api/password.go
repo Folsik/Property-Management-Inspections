@@ -144,6 +144,7 @@ func (s *Server) setPassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "password already set")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, "", "auth.password_set", "user", who(r).UserID)
 	write(w, 200, map[string]string{"status": "password_set"})
 }
 
@@ -205,6 +206,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, "", "auth.password_changed", "user", who(r).UserID)
 	write(w, 200, map[string]string{"status": "password_changed"})
 }
 
