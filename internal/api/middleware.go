@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
-	"time"
 	"runtime/debug"
+	"time"
 )
 
 type requestIDContextKey struct{}
@@ -21,6 +21,7 @@ type statusWriter struct {
 	http.ResponseWriter
 	status int
 }
+
 func (w *statusWriter) WriteHeader(code int) {
 	if w.status == 0 {
 		w.status = code
