@@ -119,7 +119,7 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/media/{media}/confirm", s.protect(http.HandlerFunc(s.confirmMedia)))
 	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/media/{media}/download", s.protect(http.HandlerFunc(s.downloadMedia)))
 	m.Handle("DELETE /v1/organizations/{org}/inspections/{inspection}/media/{media}", s.protect(http.HandlerFunc(s.deleteMedia)))
-	return requestID(recoverer(s.logger)(securityHeaders(m)))
+	return requestID(s.logger, recoverer(s.logger)(securityHeaders(m)))
 }
 func write(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
