@@ -23,6 +23,7 @@ func Open(ctx context.Context, url string) (*Store, error) {
 	}
 	// Bound the number and lifetime of connections so multiple API replicas
 	// cannot accidentally exhaust PostgreSQL's connection budget.
+	poolConfig.ConnConfig.Tracer = errorQueryTracer{}
 	poolConfig.MaxConns = 20
 	poolConfig.MaxConnLifetime = time.Hour
 	poolConfig.MaxConnIdleTime = 5 * time.Minute
