@@ -3,6 +3,8 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -87,7 +89,16 @@ func TestRefreshRotationDeviceRevocation(t *testing.T) {
 	call("GET", "/v1/me", a2, nil, 200)
 	// Strict rotation: old access is revoked by rotation (session token version).
 	call("GET", "/v1/me", a1, nil, 401)
-	// Presenting a used token signals theft and revokes the entire device session.
+	// Lost responses and concurrent retries must return the identical credential pair.
+	retry := call("POST", "/v1/auth/refresh", "", map[string]string{"refresh_token": r1}, 200)
+	if retry["refresh_token"] != r2 || retry["access_token"] != a2 {
+		t.Fatalf("refresh retry must return identical tokens: %#v", retry)
+	}
+	call("GET", "/v1/me", a2, nil, 200)
+	// Beyond the grace period, replay still revokes the device session.
+	if _, err := db.DB.Exec(ctx, "UPDATE used_refresh_tokens SET replay_until=now()-interval '1 second' WHERE token_hash=$1", apiTestRefreshHash(r1)); err != nil {
+		t.Fatal(err)
+	}
 	call("POST", "/v1/auth/refresh", "", map[string]string{"refresh_token": r1}, 401)
 	call("POST", "/v1/auth/refresh", "", map[string]string{"refresh_token": r2}, 401)
 	call("GET", "/v1/me", a2, nil, 401)
@@ -116,4 +127,9 @@ func TestRefreshRotationDeviceRevocation(t *testing.T) {
 	call("GET", "/v1/me", dev2["access_token"].(string), nil, 200)
 	call("POST", "/v1/auth/refresh/logout", "", map[string]string{"refresh_token": dev2["refresh_token"].(string)}, 200)
 	call("GET", "/v1/me", dev2["access_token"].(string), nil, 401)
+}
+
+func apiTestRefreshHash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
