@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "16.0"
+configs:
+  Debug: debug
+  Staging: release
+  Release: release
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -15,7 +19,9 @@ settings:
     INFOPLIST_KEY_NSMicrophoneUsageDescription: "Record inspection voice notes."
     INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
-    INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+    INFOPLIST_KEY_InspectlyAPIBaseURL: "$(INSPECTLY_API_BASE_URL)"
+    INFOPLIST_KEY_InspectlyEnvironment: "$(INSPECTLY_ENVIRONMENT)"
+    INSPECTLY_API_BASE_URL: ""
 targets:
   Inspectly:
     type: application
@@ -26,8 +32,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.inspectly.inspections
       configs:
         Debug:
-          INFOPLIST_KEY_InspectlyAPIBaseURL: "http://localhost:8080"
+          INSPECTLY_ENVIRONMENT: local
+          INSPECTLY_API_BASE_URL: "http://localhost:8080"
+          INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+        Staging:
+          INSPECTLY_ENVIRONMENT: staging
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: STAGING
         Release:
-          INFOPLIST_KEY_InspectlyAPIBaseURL: "https://api.example.invalid"
+          INSPECTLY_ENVIRONMENT: production
     scheme:
       testTargets: []
