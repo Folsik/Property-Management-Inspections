@@ -23,6 +23,7 @@ import (
 func Run() error {
 	cfg := config.Load()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 	if cfg.Env != "development" {
 		if strings.TrimSpace(cfg.JWTPrivateKey) == "" {
 			return errors.New("JWT_PRIVATE_KEY is required in production; provide a base64url-encoded Ed25519 private key")
