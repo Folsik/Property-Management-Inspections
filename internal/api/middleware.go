@@ -45,7 +45,8 @@ func requestID(logger *slog.Logger, next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", id)
 		start := time.Now()
 		tracked := &statusWriter{ResponseWriter: w}
-		next.ServeHTTP(tracked, r.WithContext(context.WithValue(r.Context(), requestIDContextKey{}, id)))
+		r = r.WithContext(context.WithValue(r.Context(), requestIDContextKey{}, id))
+		next.ServeHTTP(tracked, r)
 		if tracked.status == 0 {
 			tracked.status = http.StatusOK
 		}
