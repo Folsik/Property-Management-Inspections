@@ -50,6 +50,7 @@ func (s *Server) shareInspection(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, r.PathValue("org"), "report_link.created", "report_link", id)
 	w.Header().Set("Cache-Control", "no-store")
 	write(w, 201, map[string]any{"id": id, "token": token, "expires_at": expires})
 }
@@ -110,6 +111,7 @@ func (s *Server) revokeReportLink(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "active link not found")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, r.PathValue("org"), "report_link.revoked", "report_link", linkID)
 	write(w, 200, map[string]string{"status": "revoked"})
 }
 
