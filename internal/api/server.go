@@ -247,27 +247,27 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "OTP provider not configured")
 		return
 	}
-	// Keep challenge insertion atomic with provider delivery: unsuccessful sends never
-	// produce a usable OTP record. Production responses never expose the secret code.
-	tx, err := s.db.Begin(r.Context())
+	// Reserve the challenge before network I/O. A pending challenge cannot be
+	// verified until delivery is confirmed; no DB transaction spans Twilio.
+	var challengeID string
+	err = s.db.QueryRow(r.Context(), `INSERT INTO otp_challenges(phone,code_hash,expires_at)
+ VALUES($1,$2,now()+interval '5 minutes') RETURNING id`, in.Phone, string(hash)).Scan(&challengeID)
 	if err != nil {
-		fail(w, 503, "unavailable")
-		return
-	}
-	defer tx.Rollback(r.Context())
-	_, err = tx.Exec(r.Context(), "INSERT INTO otp_challenges(phone,code_hash,expires_at) VALUES($1,$2,now()+interval '5 minutes')", in.Phone, string(hash))
-	if err != nil {
+		s.logDatabaseError(r, "reserve OTP", err)
 		fail(w, 503, "unavailable")
 		return
 	}
 	if twilio.configured() {
 		if err := sendTwilioSMS(r.Context(), twilio, in.Phone, "Your Inspectly verification code is "+code+". It expires in 5 minutes."); err != nil {
-			s.logger.Error("OTP provider delivery failed", "error", err)
+			s.logger.Error("OTP provider delivery failed", "request_id", requestIDFromContext(r.Context()), "error", err)
+			_, _ = s.db.Exec(r.Context(), "DELETE FROM otp_challenges WHERE id=$1 AND delivery_confirmed_at IS NULL", challengeID)
 			fail(w, 503, "OTP delivery unavailable")
 			return
 		}
 	}
-	if err := tx.Commit(r.Context()); err != nil {
+	_, err = s.db.Exec(r.Context(), "UPDATE otp_challenges SET delivery_confirmed_at=now() WHERE id=$1 AND expires_at>now()", challengeID)
+	if err != nil {
+		s.logDatabaseError(r, "confirm OTP delivery", err)
 		fail(w, 503, "unavailable")
 		return
 	}
@@ -302,7 +302,7 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 	var id, hash string
 	var attempts int
-	err = tx.QueryRow(r.Context(), "SELECT id,code_hash,attempts FROM otp_challenges WHERE phone=$1 AND consumed_at IS NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1 FOR UPDATE", in.Phone).Scan(&id, &hash, &attempts)
+	err = tx.QueryRow(r.Context(), "SELECT id,code_hash,attempts FROM otp_challenges WHERE phone=$1 AND consumed_at IS NULL AND delivery_confirmed_at IS NOT NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1 FOR UPDATE", in.Phone).Scan(&id, &hash, &attempts)
 	if err != nil {
 		fail(w, 401, "invalid or expired OTP")
 		return
