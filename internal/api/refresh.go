@@ -5,9 +5,9 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -77,6 +77,7 @@ func (s *Server) issue(w http.ResponseWriter, r *http.Request, user string) {
 	write(w, 200, map[string]any{"access_token": access, "token_type": "Bearer", "expires_at": until,
 		"refresh_token": raw, "refresh_expires_at": expires, "session_id": sid})
 }
+
 // Cached responses are encrypted with a deployment-wide AEAD key. Only the
 // exact token used in the previous rotation can retrieve the response.
 func (s *Server) encryptRefreshResponse(value map[string]any) ([]byte, error) {
