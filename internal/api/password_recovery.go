@@ -180,6 +180,12 @@ func (s *Server) completePasswordRecovery(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
+	// Hash outside the recovery transaction; no row lock spans Argon2.
+	prehashed, err := hashPassword(in.Password)
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
 	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		fail(w, 503, "unavailable")
@@ -227,11 +233,7 @@ func (s *Server) completePasswordRecovery(w http.ResponseWriter, r *http.Request
 		fail(w, 400, err.Error())
 		return
 	}
-	nextHash, err := hashPassword(in.Password)
-	if err != nil {
-		fail(w, 503, "unavailable")
-		return
-	}
+	nextHash := prehashed
 	_, err = tx.Exec(r.Context(), `UPDATE users SET password_hash=$2,auth_epoch=auth_epoch+1,
   failed_password_attempts=0,password_locked_until=NULL,updated_at=now() WHERE id=$1`, user, nextHash)
 	if err != nil {
