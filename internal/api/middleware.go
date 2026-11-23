@@ -8,13 +8,12 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/Folsik/Property-Management-Inspections/internal/requestctx"
 )
 
-type requestIDContextKey struct{}
-
 func requestIDFromContext(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDContextKey{}).(string)
-	return id
+	return requestctx.RequestID(ctx)
 }
 
 type statusWriter struct {
@@ -46,7 +45,7 @@ func requestID(logger *slog.Logger, next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", id)
 		start := time.Now()
 		tracked := &statusWriter{ResponseWriter: w}
-		r = r.WithContext(context.WithValue(r.Context(), requestIDContextKey{}, id))
+		r = r.WithContext(requestctx.WithRequestID(r.Context(), id))
 		next.ServeHTTP(tracked, r)
 		if tracked.status == 0 {
 			tracked.status = http.StatusOK
