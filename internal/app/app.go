@@ -23,7 +23,8 @@ import (
 func Run() error {
 	cfg := config.Load()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if strings.EqualFold(cfg.Env, "production") {
+	slog.SetDefault(logger)
+	if cfg.Env != "development" {
 		if strings.TrimSpace(cfg.JWTPrivateKey) == "" {
 			return errors.New("JWT_PRIVATE_KEY is required in production; provide a base64url-encoded Ed25519 private key")
 		}
@@ -66,6 +67,10 @@ func Run() error {
 	}
 
 	service := api.New(db.DB, tokens, logger, cfg.Env)
+	service.ConfigureRefreshReplayKey(cfg.JWTPrivateKey)
+	if err := service.ConfigureTrustedBFF(cfg.TrustedBFFSecret); err != nil {
+		return err
+	}
 	// Periodic garbage collection of abandoned or invalid media, bounded and
 	// resumable. Per-row SKIP LOCKED prevents duplicate work across replicas.
 	go func() {
@@ -79,6 +84,25 @@ func Run() error {
 				logger.Error("media cleanup failed", "error", err)
 			} else if count > 0 {
 				logger.Info("stale media cleaned", "count", count)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
+		}
+	}()
+	go func() {
+		tick := time.NewTicker(5 * time.Minute)
+		defer tick.Stop()
+		for {
+			runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			count, err := service.CleanupExpiredAuth(runCtx)
+			cancel()
+			if err != nil {
+				logger.Error("auth cleanup failed", "error", err)
+			} else if count > 0 {
+				logger.Info("expired auth records cleaned", "count", count)
 			}
 			select {
 			case <-ctx.Done():

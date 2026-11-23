@@ -53,13 +53,13 @@ async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>
  const invoke=(token:string)=>fetchBackend(apiPath,{method:req.method,headers:{
   "Authorization":"Bearer "+token,
   ...(body!==undefined?{"Content-Type":"application/json"}:{})
- },body});
+ },body},req.headers);
  let response=current?await invoke(current):null;
  let pair=null;
  // Retry once after a 401 (expired JWT or rotated session generation).
  // Each response carries both replacement HttpOnly cookies back to the browser.
  if((!response||response.status===401)&&refresh){
-  const renewal=await renewSession(refresh);
+  const renewal=await renewSession(refresh,req.headers);
   if(renewal.status==="unavailable")return NextResponse.json({error:"Authentication temporarily unavailable"},{status:503});
   if(renewal.status==="expired")return clearAuthCookies(NextResponse.json({error:"Session expired"},{status:401}));
   pair=renewal.pair;
@@ -88,6 +88,7 @@ async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>
  const result=new NextResponse(text,{status:response.status,headers:{
   "Content-Type":response.headers.get("content-type")||"application/json",
   "Cache-Control":"no-store",
+  ...(response.headers.get("Retry-After")?{"Retry-After":response.headers.get("Retry-After")!}:{}),
  }});
  return pair?setAuthCookies(result,pair):result;
 }

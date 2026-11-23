@@ -24,7 +24,7 @@ func (s *Server) shareInspection(w http.ResponseWriter, r *http.Request) {
 	}
 	var exists bool
 	err := s.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM inspections
-		WHERE organization_id=$1 AND id=$2)`, r.PathValue("org"), inspectionID).Scan(&exists)
+		WHERE organization_id=$1 AND id=$2 AND deleted_at IS NULL)`, r.PathValue("org"), inspectionID).Scan(&exists)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
@@ -50,6 +50,7 @@ func (s *Server) shareInspection(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, r.PathValue("org"), "report_link.created", "report_link", id)
 	w.Header().Set("Cache-Control", "no-store")
 	write(w, 201, map[string]any{"id": id, "token": token, "expires_at": expires})
 }
@@ -110,6 +111,7 @@ func (s *Server) revokeReportLink(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "active link not found")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, r.PathValue("org"), "report_link.revoked", "report_link", linkID)
 	write(w, 200, map[string]string{"status": "revoked"})
 }
 
@@ -130,7 +132,7 @@ func (s *Server) publicReport(w http.ResponseWriter, r *http.Request) {
 	err = s.db.QueryRow(r.Context(), `SELECT i.id,p.name,i.inspection_type,i.status,i.created_at
 		FROM report_links l JOIN inspections i ON i.organization_id=l.organization_id AND i.id=l.inspection_id
 		JOIN properties p ON p.organization_id=i.organization_id AND p.id=i.property_id
-		WHERE l.token_hash=$1 AND l.revoked_at IS NULL AND l.expires_at>now()`, hash[:]).
+		WHERE l.token_hash=$1 AND l.revoked_at IS NULL AND l.expires_at>now() AND i.deleted_at IS NULL AND p.deleted_at IS NULL`, hash[:]).
 		Scan(&inspectionID, &propertyName, &kind, &status, &date)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 404, "report link not found or expired")
@@ -141,7 +143,7 @@ func (s *Server) publicReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT title,notes,severity,status FROM inspection_items
-		WHERE inspection_id=$1 ORDER BY created_at LIMIT 500`, inspectionID)
+		WHERE inspection_id=$1 AND deleted_at IS NULL ORDER BY created_at LIMIT 500`, inspectionID)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return

@@ -20,7 +20,8 @@ func main() {
 	defer stop()
 	cfg := config.Load()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if strings.EqualFold(cfg.Env, "production") {
+	slog.SetDefault(logger)
+	if cfg.Env != "development" {
 		u, err := url.Parse(cfg.DatabaseURL)
 		if err != nil || u.Host == "" || (u.Scheme != "postgres" && u.Scheme != "postgresql") ||
 			strings.Contains(cfg.DatabaseURL, "inspections_dev_password") || u.Query().Get("sslmode") != "verify-full" {

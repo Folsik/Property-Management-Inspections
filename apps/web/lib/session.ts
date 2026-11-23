@@ -36,12 +36,12 @@ export function clearAuthCookies(res:NextResponse){
  res.headers.set("Cache-Control","no-store");
  return res;
 }
-export async function renewSession(refreshToken:string):Promise<RenewalResult>{
+export async function renewSession(refreshToken:string,clientHeaders?:Headers):Promise<RenewalResult>{
  if(!/^[a-zA-Z0-9_-]{43}$/.test(refreshToken))return {status:"expired"};
  const existing=flights.get(refreshToken);
  if(existing&&existing.until>Date.now())return existing.promise;
  const promise=(async()=>{
-  const res=await fetchBackend("v1/auth/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({refresh_token:refreshToken})});
+  const res=await fetchBackend("v1/auth/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({refresh_token:refreshToken})},clientHeaders);
   if(res.status===401||res.status===403)return {status:"expired" as const};
   if(!res.ok)return {status:"unavailable" as const};
   const data=await res.json().catch(()=>null);
