@@ -19,7 +19,7 @@ func (errorQueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.
 }
 
 func (errorQueryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
-	if data.Err == nil {
+	if data.Err == nil || errors.Is(data.Err, pgx.ErrNoRows) {
 		return
 	}
 	var pgErr *pgconn.PgError
