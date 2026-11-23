@@ -101,13 +101,7 @@ func (s *Server) requestPasswordRecovery(w http.ResponseWriter, r *http.Request)
 		fail(w, 503, "unavailable")
 		return
 	}
-	// Invalidate previous outstanding challenges before issuing a new one.
-	_, err = tx.Exec(r.Context(), `UPDATE auth_sessions SET revoked_at=now(),revocation_reason='password_reset'
- WHERE user_id=$1 AND revoked_at IS NULL`, user)
-	if err != nil {
-		fail(w, 503, "unavailable")
-		return
-	}
+	// Existing authenticated devices are revoked only after a completed reset.
 	_, err = tx.Exec(r.Context(), `UPDATE password_recoveries SET used_at=now() WHERE user_id=$1 AND used_at IS NULL`, user)
 	if err != nil {
 		fail(w, 503, "unavailable")
@@ -116,6 +110,12 @@ func (s *Server) requestPasswordRecovery(w http.ResponseWriter, r *http.Request)
 	_, err = tx.Exec(r.Context(), `INSERT INTO password_recoveries(user_id,token_hash,sms_code_hash,expires_at)
  VALUES($1,$2,$3,now()+interval '10 minutes')`, user, recoveryDigest(token), string(hash))
 	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	// Commit challenge state before external email/SMS delivery: no DB locks
+	// survive slow or failing provider calls.
+	if err = tx.Commit(r.Context()); err != nil {
 		fail(w, 503, "unavailable")
 		return
 	}
@@ -130,6 +130,8 @@ func (s *Server) requestPasswordRecovery(w http.ResponseWriter, r *http.Request)
 		body := "<p>To reset your Inspectly password, follow this link:</p><p><a href=\"" + html.EscapeString(link) + "\">Reset password</a></p><p>Expires in 10 minutes. A separate code will be sent by SMS. If you did not request this, ignore this email.</p>"
 		if err = sendTransactionalEmail(r.Context(), email, "Reset your Inspectly password", body); err != nil {
 			s.logger.Error("recovery email delivery failed", "error", err)
+			// Abort a challenge even when one of the providers already sent.
+			_, _ = s.db.Exec(r.Context(), "UPDATE password_recoveries SET used_at=now() WHERE token_hash=$1", recoveryDigest(token))
 			fail(w, 503, "recovery delivery unavailable")
 			return
 		}
@@ -137,13 +139,11 @@ func (s *Server) requestPasswordRecovery(w http.ResponseWriter, r *http.Request)
 	if sms.configured() {
 		if err = sendTwilioSMS(r.Context(), sms, phone, "Inspectly password recovery code: "+code+". Expires in 10 minutes. Never share this code."); err != nil {
 			s.logger.Error("recovery SMS delivery failed", "error", err)
+			// Abort a challenge even when one of the providers already sent.
+			_, _ = s.db.Exec(r.Context(), "UPDATE password_recoveries SET used_at=now() WHERE token_hash=$1", recoveryDigest(token))
 			fail(w, 503, "recovery delivery unavailable")
 			return
 		}
-	}
-	if err = tx.Commit(r.Context()); err != nil {
-		fail(w, 503, "unavailable")
-		return
 	}
 	response := map[string]string{"status": "accepted", "message": generic}
 	if s.env == "development" {
@@ -236,6 +236,12 @@ func (s *Server) completePasswordRecovery(w http.ResponseWriter, r *http.Request
 	nextHash := prehashed
 	_, err = tx.Exec(r.Context(), `UPDATE users SET password_hash=$2,auth_epoch=auth_epoch+1,
   failed_password_attempts=0,password_locked_until=NULL,updated_at=now() WHERE id=$1`, user, nextHash)
+	if err != nil {
+		fail(w, 503, "unavailable")
+		return
+	}
+	_, err = tx.Exec(r.Context(), `UPDATE auth_sessions SET revoked_at=now(),revocation_reason='password_reset'
+ WHERE user_id=$1 AND revoked_at IS NULL`, user)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
