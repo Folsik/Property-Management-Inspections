@@ -40,5 +40,9 @@ targets:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: STAGING
         Release:
           INSPECTLY_ENVIRONMENT: production
+    preBuildScripts:
+      - name: Validate compiled API endpoint
+        script: 'bash "$SRCROOT/scripts/validate_endpoint.sh"'
+        basedOnDependencyAnalysis: false
     scheme:
       testTargets: []
