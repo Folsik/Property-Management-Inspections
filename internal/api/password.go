@@ -156,19 +156,16 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	tx, err := s.db.Begin(r.Context())
-	if err != nil {
-		fail(w, 503, "unavailable")
-		return
-	}
-	defer tx.Rollback(r.Context())
 	var phone, hash string
 	var email *string
-	err = tx.QueryRow(r.Context(), `SELECT phone,coalesce(password_hash,''),email FROM users WHERE id=$1 FOR UPDATE`, who(r).UserID).Scan(&phone, &hash, &email)
+	err := s.db.QueryRow(r.Context(), `SELECT phone,coalesce(password_hash,''),email
+ FROM users WHERE id=$1`, who(r).UserID).Scan(&phone, &hash, &email)
 	if err != nil {
+		s.logDatabaseError(r, "load password revision", err)
 		fail(w, 503, "unavailable")
 		return
 	}
+	// Both Argon2 verifications and the new hash run outside all transactions.
 	if hash == "" || !verifyPassword(hash, in.CurrentPassword) {
 		fail(w, 401, "invalid current password")
 		return
@@ -190,10 +187,25 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	_, err = tx.Exec(r.Context(), `UPDATE users SET password_hash=$2,failed_password_attempts=0,
- password_locked_until=NULL,auth_epoch=auth_epoch+1,updated_at=now() WHERE id=$1`, who(r).UserID, nextHash)
+	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		fail(w, 503, "unavailable")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	// CAS under the lock prevents a concurrent password change from using
+	// an outdated verification or resetting another session generation.
+	tag, err := tx.Exec(r.Context(), `UPDATE users SET password_hash=$3,
+ failed_password_attempts=0,password_locked_until=NULL,
+ auth_epoch=auth_epoch+1,updated_at=now()
+ WHERE id=$1 AND password_hash=$2`, who(r).UserID, hash, nextHash)
+	if err != nil {
+		s.logDatabaseError(r, "update password revision", err)
+		fail(w, 503, "unavailable")
+		return
+	}
+	if tag.RowsAffected() != 1 {
+		fail(w, 409, "password changed concurrently")
 		return
 	}
 	_, err = tx.Exec(r.Context(), `UPDATE auth_sessions SET revoked_at=now(),revocation_reason='password_changed'
