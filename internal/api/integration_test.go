@@ -197,6 +197,20 @@ func TestPostgresSmoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	call("GET", "/v1/public/reports/"+liveLink, "", nil, 404)
+	// Security audit records must correlate successful authentication and sharing.
+	var securityEvents int
+	err = db.DB.QueryRow(ctx, `SELECT count(*) FROM audit_log
+ WHERE organization_id=$1 AND action IN ('report_link.created','report_link.revoked','invitation.created')`, org).Scan(&securityEvents)
+	if err != nil || securityEvents < 3 {
+		t.Fatalf("tenant security audit: events=%d err=%v", securityEvents, err)
+	}
+	var authEvents int
+	err = db.DB.QueryRow(ctx, `SELECT count(*) FROM audit_log
+ WHERE actor_id=(SELECT id FROM users WHERE phone=$1)
+ AND action='auth.login'`, ownerPhone).Scan(&authEvents)
+	if err != nil || authEvents < 1 {
+		t.Fatalf("auth audit: events=%d err=%v", authEvents, err)
+	}
 	if strings.TrimSpace(org) == "" {
 		t.Fatal("missing org")
 	}
