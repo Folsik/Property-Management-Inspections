@@ -21,7 +21,7 @@ func (s *Server) auditSecurityEvent(r *http.Request, actor, org, action, resourc
 	}
 	_, err := s.db.Exec(r.Context(), `INSERT INTO audit_log
  (organization_id,actor_id,action,resource_type,resource_id,metadata)
- VALUES($1,$2,$3,$4,$5,jsonb_build_object('request_id',$6))`,
+ VALUES($1,$2,$3,$4,$5,jsonb_build_object('request_id',$6::text))`,
 		organizationID, actorID, action, resourceType, targetID, requestIDFromContext(r.Context()))
 	if err != nil {
 		s.logDatabaseError(r, "security audit insert", err)
