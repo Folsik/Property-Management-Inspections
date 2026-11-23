@@ -49,3 +49,14 @@ There are no fabricated demo records: the lists come from authenticated Go endpo
 - **Important limitation:** the current file upload uses foreground `URLSession.upload(for:fromFile:)`. A persisted background URLSession uploader with full offline retry/resume and a durable queue is the next native reliability milestone; do not claim foreground uploads survive app termination.
 
 Camera capture and microphone work on supported real devices. Manual Xcode 26.2 testing (device permissions, app suspension, invalid/expired S3 tickets, media of 50MiB+, malformed recordings, and server-side tenant isolation) is still required before promotion to `main`.
+
+## Stage 1: physical iPhone and TestFlight connectivity
+
+The generated Xcode project has **Debug** (simulator-only localhost), **Staging** (HTTPS),
+and **Release** (HTTPS) configurations. The source of truth is `project.yml`.
+Staging/Release have **no default URL**: set `INSPECTLY_API_BASE_URL` explicitly
+in the Xcode build invocation or in local, untracked Xcode settings before building.
+An absent, malformed, local, placeholder, or non-HTTPS public endpoint fails closed
+with a configuration error. Do not edit a generated Info.plist or commit secrets.
+
+See [production connectivity and TestFlight runbook](../../docs/ios-connectivity-testflight.md).
