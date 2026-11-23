@@ -1,10 +1,10 @@
 package api
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"encoding/base64"
 	"encoding/hex"
@@ -81,11 +81,17 @@ func (s *Server) issue(w http.ResponseWriter, r *http.Request, user string) {
 // exact token used in the previous rotation can retrieve the response.
 func (s *Server) encryptRefreshResponse(value map[string]any) ([]byte, error) {
 	plaintext, err := json.Marshal(value)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	block, err := aes.NewCipher(s.refreshReplayKey[:])
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	aead, err := cipher.NewGCM(block)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	nonce := make([]byte, aead.NonceSize())
 	if _, err := rand.Read(nonce); err != nil { return nil, err }
 	return aead.Seal(nonce, nonce, plaintext, nil), nil
@@ -93,12 +99,20 @@ func (s *Server) encryptRefreshResponse(value map[string]any) ([]byte, error) {
 
 func (s *Server) decryptRefreshResponse(encrypted []byte) (map[string]any, error) {
 	block, err := aes.NewCipher(s.refreshReplayKey[:])
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	aead, err := cipher.NewGCM(block)
-	if err != nil { return nil, err }
-	if len(encrypted) < aead.NonceSize() { return nil, errors.New("invalid encrypted refresh response") }
+	if err != nil {
+		return nil, err
+	}
+	if len(encrypted) < aead.NonceSize() {
+		return nil, errors.New("invalid encrypted refresh response")
+	}
 	plaintext, err := aead.Open(nil, encrypted[:aead.NonceSize()], encrypted[aead.NonceSize():], nil)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	var response map[string]any
 	if err := json.Unmarshal(plaintext, &response); err != nil { return nil, err }
 	return response, nil
