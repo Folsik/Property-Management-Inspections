@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "16.0"
+configs:
+  Debug: debug
+  Staging: debug
+  Release: release
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -21,13 +25,38 @@ targets:
     type: application
     platform: iOS
     sources: [Inspectly]
+    info:
+      path: Generated/Info.plist
+      properties:
+        InspectlyAPIBaseURL: $(INSPECTLY_API_BASE_URL)
+        CFBundleDisplayName: Inspectly
+        NSCameraUsageDescription: Capture property inspection photos.
+        NSMicrophoneUsageDescription: Record inspection voice notes.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UILaunchScreen: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.inspectly.inspections
       configs:
         Debug:
-          INFOPLIST_KEY_InspectlyAPIBaseURL: "http://localhost:8080"
+          INSPECTLY_API_BASE_URL: "http://localhost:8080"
+        Staging:
+          INSPECTLY_API_BASE_URL: "https://staging-api.groupmax.ru"
         Release:
-          INFOPLIST_KEY_InspectlyAPIBaseURL: "https://api.example.invalid"
-    scheme:
-      testTargets: []
+          INSPECTLY_API_BASE_URL: "https://api.example.invalid"
+schemes:
+  Inspectly:
+    build:
+      targets:
+        Inspectly: all
+    run:
+      config: Debug
+  Inspectly-Staging:
+    build:
+      targets:
+        Inspectly: all
+    run:
+      config: Staging
+    archive:
+      config: Release

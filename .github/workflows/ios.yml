@@ -28,3 +28,12 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug CODE_SIGNING_ALLOWED=NO build
         working-directory: apps/ios
+
+      - name: Compile Staging and verify packaged API endpoint
+        run: |
+          xcodebuild -project Inspectly.xcodeproj -scheme Inspectly-Staging \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Staging -derivedDataPath /tmp/inspectly-staging-build CODE_SIGNING_ALLOWED=NO build
+          actual=$(/usr/libexec/PlistBuddy -c 'Print :InspectlyAPIBaseURL' /tmp/inspectly-staging-build/Build/Products/Staging-iphonesimulator/Inspectly.app/Info.plist)
+          test "$actual" = 'https://staging-api.groupmax.ru'
+        working-directory: apps/ios

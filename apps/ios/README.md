@@ -7,7 +7,7 @@ Native SwiftUI application targeting iOS 17+. This branch (`feat/ios-foundation`
 1. Install Xcode 26.2 (your installed version is supported; the CI runner may use another compatible Xcode) and [XcodeGen](https://github.com/yonaskolb/XcodeGen) on macOS (for example, `brew install xcodegen`).
 2. From `apps/ios`, run `xcodegen generate --spec project.yml`.
 3. Open `Inspectly.xcodeproj`, choose an iOS 17+ Simulator, and run `Inspectly`.
-4. Debug uses `http://localhost:8080`; start the existing Go API/Docker Compose service on your Mac first. On a physical iPhone, use a reachable HTTPS host, not localhost.
+4. Debug uses `http://localhost:8080`; start the existing Go API/Docker Compose service on your Mac first. On a physical iPhone, select the Inspectly-Staging scheme, which uses https://staging-api.groupmax.ru.
 5. Release currently uses the deliberate invalid placeholder `https://api.example.invalid`. Configure a real HTTPS API and signing/team settings before any distribution.
 
 The project is generated, not checked in; source of truth is `project.yml`. GitHub Actions builds with the iOS Simulator SDK without code signing. This branch remains isolated from `main` until native CI and owner review.
@@ -36,7 +36,7 @@ References: [mobile API](../../docs/api-v1-mobile.md), [device sessions](../../d
 
 The XcodeGen spec declares Swift 5.9 language mode and iOS 17 as a minimum deployment target. This is intentional for compatibility and is not a requirement to use Xcode 16. Xcode 26.2 can open the generated project. Configure a Personal Team in Signing & Capabilities for on-device testing; GitHub Actions uses `CODE_SIGNING_ALLOWED=NO` only for simulator builds.
 
-The local API default is `http://localhost:8080`, valid **only in the simulator running on the same Mac as Docker/Go**. On a real iPhone, `localhost` points at the phone. Use a reachable HTTPS origin and update `InspectlyAPIBaseURL` in the XcodeGen build configuration, then regenerate the project. Production uses a deliberately invalid placeholder until a trusted deployment address is configured.
+The local API default is `http://localhost:8080`, valid **only in the simulator running on the same Mac as Docker/Go**. On a real iPhone, `localhost` points at the phone. Use the `Inspectly-Staging` scheme on a physical iPhone. Its Staging configuration expands `INSPECTLY_API_BASE_URL` into the explicit generated Info.plist key `InspectlyAPIBaseURL`. Regenerate the project after changes. Production uses a deliberately invalid placeholder until a trusted deployment address is configured.
 
 There are no fabricated demo records: the lists come from authenticated Go endpoints. A missing tenant or property is represented by an empty state. The account created through phone OTP requires the production Twilio provider in nondevelopment deployments; local dev API may return a test OTP for simulator use only.
 
@@ -49,3 +49,7 @@ There are no fabricated demo records: the lists come from authenticated Go endpo
 - **Important limitation:** the current file upload uses foreground `URLSession.upload(for:fromFile:)`. A persisted background URLSession uploader with full offline retry/resume and a durable queue is the next native reliability milestone; do not claim foreground uploads survive app termination.
 
 Camera capture and microphone work on supported real devices. Manual Xcode 26.2 testing (device permissions, app suspension, invalid/expired S3 tickets, media of 50MiB+, malformed recordings, and server-side tenant isolation) is still required before promotion to `main`.
+
+## Staging device smoke test
+
+Run `xcodegen generate --spec project.yml`, open the project, select `Inspectly-Staging`, choose your connected iPhone and configure your development team. Verify the public `/healthz` endpoint on the phone before signing in. Debug remains local and Release remains intentionally unconfigured. Do not switch environments with an active session: the current Keychain store is shared across configurations; sign out first. CI checks the built Staging Info.plist, but physical-device authentication still requires manual testing.
