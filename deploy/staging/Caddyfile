@@ -1,0 +1,27 @@
+app.staging.groupmax.ru {
+    encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        Strict-Transport-Security "max-age=86400"
+    }
+    reverse_proxy web:3000 {
+        header_up -X-Inspectly-Client-IP
+        header_up -X-Inspectly-Proxy-Secret
+        header_up X-Inspectly-Ingress-IP {http.request.remote.host}
+        header_up X-Inspectly-Ingress-Secret {$TRUSTED_INGRESS_SECRET}
+    }
+}
+api.staging.groupmax.ru {
+    encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Strict-Transport-Security "max-age=86400"
+    }
+    reverse_proxy api:8080 {
+        header_up -X-Inspectly-Ingress-IP
+        header_up -X-Inspectly-Ingress-Secret
+        header_up X-Inspectly-Client-IP {http.request.remote.host}
+        header_up X-Inspectly-Proxy-Secret {$TRUSTED_BFF_SECRET}
+    }
+}
