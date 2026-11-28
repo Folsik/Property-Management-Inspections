@@ -26,6 +26,7 @@ final class SessionModel: ObservableObject {
         } catch APIError.noSession {
             isSignedIn = false
         } catch {
+            didRestore = false
             // A network outage is not necessarily a revoked session. The
             // Keychain token stays intact unless the API confirms revocation.
             message = error.localizedDescription

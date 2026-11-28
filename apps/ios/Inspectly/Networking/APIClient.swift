@@ -5,17 +5,19 @@ import Foundation
 actor APIClient {
     private let baseURL: URL?
     private let session: URLSession
-    private let keychain = KeychainRefreshStore()
+    private let keychain: KeychainRefreshStore
+    private var signingOut = false
     private let decoder: JSONDecoder
     private var accessToken: String?
     private var refreshTask: Task<AuthPair, Error>?
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = URLSession(configuration: .ephemeral, delegate: RejectRedirects(), delegateQueue: nil)) {
         self.session = session
         self.baseURL = EndpointConfiguration.resolve(
             environment: Bundle.main.object(forInfoDictionaryKey: "InspectlyEnvironment") as? String,
             value: Bundle.main.object(forInfoDictionaryKey: "InspectlyAPIBaseURL") as? String
         )
+        self.keychain = KeychainRefreshStore(origin: self.baseURL)
         self.decoder = JSONDecoder()
         self.decoder.keyDecodingStrategy = .convertFromSnakeCase
         self.decoder.dateDecodingStrategy = .custom { decoder in
@@ -87,17 +89,21 @@ actor APIClient {
     }
 
     private func refresh() async throws -> String {
+        guard !signingOut else { throw APIError.noSession }
         if let active = refreshTask {
             let pair = try await active.value
             return pair.accessToken
         }
         guard let stored = try keychain.read() else { throw APIError.noSession }
-        let task = Task { try await exchangeRefresh(stored) }
+        let task = Task {
+            let pair = try await exchangeRefresh(stored)
+            try persist(pair)
+            return pair
+        }
         refreshTask = task
         defer { refreshTask = nil }
         do {
             let pair = try await task.value
-            try persist(pair)
             return pair.accessToken
         } catch APIError.unauthorized {
             try keychain.clear()
@@ -138,6 +144,7 @@ actor APIClient {
     }
 
     private func token() async throws -> String {
+        guard !signingOut else { throw APIError.noSession }
         if let accessToken { return accessToken }
         return try await refresh()
     }
@@ -350,6 +357,10 @@ actor APIClient {
     }
 
     func signOut() async throws {
+        guard !signingOut else { throw APIError.noSession }
+        signingOut = true
+        defer { signingOut = false }
+        if let pending = refreshTask { _ = try? await pending.value }
         if let current = try keychain.read() {
             let body = try encode(["refresh_token": current])
             let (_, response) = try await transport("v1/auth/refresh/logout", method: "POST", body: body)
@@ -359,5 +370,12 @@ actor APIClient {
         }
         try keychain.clear()
         accessToken = nil
+    }
+}
+
+// Auth bodies and bearer credentials must never follow an HTTP redirect.
+final class RejectRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }

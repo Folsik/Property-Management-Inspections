@@ -44,5 +44,18 @@ targets:
       - name: Validate compiled API endpoint
         script: 'bash "$SRCROOT/scripts/validate_endpoint.sh"'
         basedOnDependencyAnalysis: false
-    scheme:
-      testTargets: []
+schemes:
+  Inspectly:
+    build:
+      targets:
+        Inspectly: all
+    run:
+      config: Debug
+  Inspectly-Staging:
+    build:
+      targets:
+        Inspectly: all
+    run:
+      config: Staging
+    archive:
+      config: Staging

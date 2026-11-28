@@ -35,10 +35,13 @@ jobs:
         run: |
           set -euo pipefail
           for configuration in Staging Release; do
+            origin="https://ci-${configuration}.inspectly.app"
             xcodebuild -project Inspectly.xcodeproj -scheme Inspectly \
               -destination 'generic/platform=iOS Simulator' \
               -configuration "$configuration" \
-              INSPECTLY_API_BASE_URL="https://ci-check.inspectly.app" \
-              CODE_SIGNING_ALLOWED=NO build
+              INSPECTLY_API_BASE_URL="$origin" \
+              -derivedDataPath "/tmp/inspectly-$configuration" CODE_SIGNING_ALLOWED=NO build
+            plist="/tmp/inspectly-$configuration/Build/Products/$configuration-iphonesimulator/Inspectly.app/Info.plist"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :InspectlyAPIBaseURL' "$plist")" = "$origin"
           done
         working-directory: apps/ios

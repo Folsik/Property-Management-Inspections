@@ -4,7 +4,12 @@ import Security
 // Refresh credentials are never written to UserDefaults, logs or app documents.
 // ThisDeviceOnly prevents credentials from migrating into another device backup.
 struct KeychainRefreshStore {
-    private let service = "com.inspectly.inspections.refresh"
+    private let service: String
+
+    init(origin: URL?) {
+        // Do not read legacy unscoped credentials; require sign-in once after upgrade.
+        service = "com.inspectly.inspections.refresh." + (origin?.absoluteString ?? "invalid")
+    }
     private let account = "current-device"
 
     func read() throws -> String? {
