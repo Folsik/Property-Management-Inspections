@@ -37,7 +37,7 @@ func TestPostgresSmoke(t *testing.T) {
 		t.Fatalf("idempotent database migration: %v", err)
 	}
 	var versions int
-	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 12 {
+	if err := db.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil || versions != 16 {
 		t.Fatalf("migration versions: count=%d err=%v", versions, err)
 	}
 	tokens, err := auth.NewManager("integration-test", 15*time.Minute)
@@ -184,6 +184,33 @@ func TestPostgresSmoke(t *testing.T) {
 	loginToken := pinLogin["access_token"].(string)
 	call("POST", "/v1/auth/logout", loginToken, map[string]any{}, 200)
 	call("GET", "/v1/me", loginToken, nil, 401)
+	// A previously issued capability must never expose soft-deleted rows.
+	liveLink := call("POST", "/v1/organizations/"+org+"/inspections/"+inspection+"/share", owner, map[string]any{}, 201)["token"].(string)
+	if _, err := db.DB.Exec(ctx, "UPDATE inspection_items SET deleted_at=now() WHERE id=$1", itemID); err != nil {
+		t.Fatal(err)
+	}
+	filtered := call("GET", "/v1/public/reports/"+liveLink, "", nil, 200)
+	if len(filtered["items"].([]any)) != 0 {
+		t.Fatalf("deleted item exposed: %#v", filtered)
+	}
+	if _, err := db.DB.Exec(ctx, "UPDATE inspections SET deleted_at=now() WHERE id=$1", inspection); err != nil {
+		t.Fatal(err)
+	}
+	call("GET", "/v1/public/reports/"+liveLink, "", nil, 404)
+	// Security audit records must correlate successful authentication and sharing.
+	var securityEvents int
+	err = db.DB.QueryRow(ctx, `SELECT count(*) FROM audit_log
+ WHERE organization_id=$1 AND action IN ('report_link.created','report_link.revoked','invitation.created')`, org).Scan(&securityEvents)
+	if err != nil || securityEvents < 3 {
+		t.Fatalf("tenant security audit: events=%d err=%v", securityEvents, err)
+	}
+	var authEvents int
+	err = db.DB.QueryRow(ctx, `SELECT count(*) FROM audit_log
+ WHERE actor_id=(SELECT id FROM users WHERE phone=$1)
+ AND action='auth.login'`, ownerPhone).Scan(&authEvents)
+	if err != nil || authEvents < 1 {
+		t.Fatalf("auth audit: events=%d err=%v", authEvents, err)
+	}
 	if strings.TrimSpace(org) == "" {
 		t.Fatal("missing org")
 	}

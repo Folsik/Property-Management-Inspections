@@ -19,6 +19,18 @@ func hmacSHA(key []byte, msg string) []byte {
 	return m.Sum(nil)
 }
 func hexHash(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
+
+// sigV4Signature centralizes AWS4 signing key derivation across S3 operations.
+// The caller remains responsible for canonical URI, headers and query ordering.
+func sigV4Signature(secret, region, date, timestamp, scope, canonical string) string {
+	toSign := "AWS4-HMAC-SHA256\n" + timestamp + "\n" + scope + "\n" + hexHash(canonical)
+	key := hmacSHA([]byte("AWS4"+secret), date)
+	key = hmacSHA(key, region)
+	key = hmacSHA(key, "s3")
+	key = hmacSHA(key, "aws4_request")
+	return hex.EncodeToString(hmacSHA(key, toSign))
+}
+
 func presignPUT(endpoint, bucket, region, access, secret, objectKey, mime string, now time.Time) (string, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
@@ -41,12 +53,7 @@ func presignPUT(endpoint, bucket, region, access, secret, objectKey, mime string
 	q.Set("X-Amz-SignedHeaders", "content-type;host")
 	u.RawQuery = q.Encode()
 	canonical := "PUT\n" + u.EscapedPath() + "\n" + u.RawQuery + "\ncontent-type:" + mime + "\nhost:" + u.Host + "\n\ncontent-type;host\nUNSIGNED-PAYLOAD"
-	toSign := "AWS4-HMAC-SHA256\n" + amz + "\n" + scope + "\n" + hexHash(canonical)
-	key := hmacSHA([]byte("AWS4"+secret), date)
-	key = hmacSHA(key, region)
-	key = hmacSHA(key, "s3")
-	key = hmacSHA(key, "aws4_request")
-	q.Set("X-Amz-Signature", hex.EncodeToString(hmacSHA(key, toSign)))
+	q.Set("X-Amz-Signature", sigV4Signature(secret, region, date, amz, scope, canonical))
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

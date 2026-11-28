@@ -52,6 +52,9 @@ func (s *Server) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid email")
 		return
 	}
+	if !s.limitIdentifier(w, r, "email-request", email, 5, 15*time.Minute) {
+		return
+	}
 	var count int
 	err := s.db.QueryRow(r.Context(), `SELECT count(*) FROM email_challenges WHERE user_id=$1 AND created_at > now()-interval '15 minutes'`, who(r).UserID).Scan(&count)
 	if err != nil {
@@ -88,26 +91,27 @@ func (s *Server) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "email provider not configured")
 		return
 	}
-	tx, err := s.db.Begin(r.Context())
+	// Pending email challenges cannot be consumed until delivery succeeds.
+	var challengeID string
+	err = s.db.QueryRow(r.Context(), `INSERT INTO email_challenges(user_id,email,code_hash,expires_at)
+ VALUES($1,$2,$3,now()+interval '10 minutes') RETURNING id`, who(r).UserID, email, string(hashed)).Scan(&challengeID)
 	if err != nil {
-		fail(w, 503, "unavailable")
-		return
-	}
-	defer tx.Rollback(r.Context())
-	_, err = tx.Exec(r.Context(), `INSERT INTO email_challenges(user_id,email,code_hash,expires_at) VALUES($1,$2,$3,now()+interval '10 minutes')`, who(r).UserID, email, string(hashed))
-	if err != nil {
+		s.logDatabaseError(r, "reserve email verification", err)
 		fail(w, 503, "unavailable")
 		return
 	}
 	if provider {
 		err = sendTransactionalEmail(r.Context(), email, "Verify your Inspectly email", "<p>Your Inspectly verification code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes.</p>")
 		if err != nil {
-			s.logger.Error("email delivery failed", "error", err)
+			s.logger.Error("email delivery failed", "request_id", requestIDFromContext(r.Context()), "error", err)
+			_, _ = s.db.Exec(r.Context(), "DELETE FROM email_challenges WHERE id=$1 AND delivery_confirmed_at IS NULL", challengeID)
 			fail(w, 503, "email delivery unavailable")
 			return
 		}
 	}
-	if err = tx.Commit(r.Context()); err != nil {
+	_, err = s.db.Exec(r.Context(), "UPDATE email_challenges SET delivery_confirmed_at=now() WHERE id=$1 AND expires_at>now()", challengeID)
+	if err != nil {
+		s.logDatabaseError(r, "confirm email verification delivery", err)
 		fail(w, 503, "unavailable")
 		return
 	}
@@ -137,6 +141,9 @@ func (s *Server) verifyEmailOTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if !s.limitIdentifier(w, r, "email-verify", email, 20, 10*time.Minute) {
+		return
+	}
 	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		fail(w, 503, "unavailable")
@@ -146,7 +153,7 @@ func (s *Server) verifyEmailOTP(w http.ResponseWriter, r *http.Request) {
 	var id, hash string
 	var attempts int
 	err = tx.QueryRow(r.Context(), `SELECT id,code_hash,attempts FROM email_challenges WHERE user_id=$1 AND email=$2
- AND consumed_at IS NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, who(r).UserID, email).Scan(&id, &hash, &attempts)
+ AND consumed_at IS NULL AND delivery_confirmed_at IS NOT NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, who(r).UserID, email).Scan(&id, &hash, &attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 401, "invalid or expired code")
 		return

@@ -6,7 +6,7 @@ options:
   xcodeVersion: "16.0"
 configs:
   Debug: debug
-  Staging: debug
+  Staging: release
   Release: release
 settings:
   base:
@@ -19,44 +19,30 @@ settings:
     INFOPLIST_KEY_NSMicrophoneUsageDescription: "Record inspection voice notes."
     INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
-    INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+    INFOPLIST_KEY_InspectlyAPIBaseURL: "$(INSPECTLY_API_BASE_URL)"
+    INFOPLIST_KEY_InspectlyEnvironment: "$(INSPECTLY_ENVIRONMENT)"
+    INSPECTLY_API_BASE_URL: ""
 targets:
   Inspectly:
     type: application
     platform: iOS
     sources: [Inspectly]
-    info:
-      path: Generated/Info.plist
-      properties:
-        InspectlyAPIBaseURL: $(INSPECTLY_API_BASE_URL)
-        CFBundleDisplayName: Inspectly
-        NSCameraUsageDescription: Capture property inspection photos.
-        NSMicrophoneUsageDescription: Record inspection voice notes.
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-        UILaunchScreen: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.inspectly.inspections
       configs:
         Debug:
+          INSPECTLY_ENVIRONMENT: local
           INSPECTLY_API_BASE_URL: "http://localhost:8080"
+          INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
         Staging:
-          INSPECTLY_API_BASE_URL: "https://staging-api.groupmax.ru"
+          INSPECTLY_ENVIRONMENT: staging
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: STAGING
         Release:
-          INSPECTLY_API_BASE_URL: "https://api.example.invalid"
-schemes:
-  Inspectly:
-    build:
-      targets:
-        Inspectly: all
-    run:
-      config: Debug
-  Inspectly-Staging:
-    build:
-      targets:
-        Inspectly: all
-    run:
-      config: Staging
-    archive:
-      config: Release
+          INSPECTLY_ENVIRONMENT: production
+    preBuildScripts:
+      - name: Validate compiled API endpoint
+        script: 'bash "$SRCROOT/scripts/validate_endpoint.sh"'
+        basedOnDependencyAnalysis: false
+    scheme:
+      testTargets: []

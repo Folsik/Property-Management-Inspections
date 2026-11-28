@@ -152,9 +152,9 @@ func TestGuidedOnboardingAndInvitations(t *testing.T) {
 	call("POST", "/v1/auth/recovery/complete", "", map[string]string{"token": resetEmail["dev_token"].(string), "code": resetEmail["dev_code"].(string), "password": "yet another entirely new passphrase"}, 401)
 	call("GET", "/v1/me", worker, nil, 401)
 	call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "a fresh strong passphrase from memory"}, 200)
-	// Five failed password attempts lock the account, including for a correct password.
+	// Failed attempts incur bounded backoff without allowing an attacker to lock out the legitimate owner.
 	for i := 0; i < 5; i++ {
 		call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "wrong-password"}, 401)
 	}
-	call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "a fresh strong passphrase from memory"}, 429)
+	call("POST", "/v1/auth/password/login", "", map[string]string{"identifier": workerEmail, "password": "a fresh strong passphrase from memory"}, 200)
 }

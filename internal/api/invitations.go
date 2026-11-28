@@ -130,6 +130,7 @@ func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, r.PathValue("org"), "invitation.created", "invitation", id)
 	// Raw token is returned only once, to an authorized organization administrator.
 	write(w, 201, map[string]any{"id": id, "role": in.Role, "email": email, "token": token, "expires_at": expires})
 }

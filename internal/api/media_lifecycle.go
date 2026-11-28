@@ -92,12 +92,7 @@ func presignObjectURL(endpoint, bucket, region, access, secret, key, method, mim
 	q.Set("X-Amz-SignedHeaders", headers)
 	u.RawQuery = q.Encode()
 	canonical := method + "\n" + u.EscapedPath() + "\n" + u.RawQuery + "\n" + canonHeaders + "\n" + headers + "\nUNSIGNED-PAYLOAD"
-	toSign := "AWS4-HMAC-SHA256\n" + stamp + "\n" + scope + "\n" + hexHash(canonical)
-	signing := hmacSHA([]byte("AWS4"+secret), date)
-	signing = hmacSHA(signing, region)
-	signing = hmacSHA(signing, "s3")
-	signing = hmacSHA(signing, "aws4_request")
-	q.Set("X-Amz-Signature", fmt.Sprintf("%x", hmacSHA(signing, toSign)))
+	q.Set("X-Amz-Signature", sigV4Signature(secret, region, date, stamp, scope, canonical))
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
@@ -126,12 +121,7 @@ func presignCopyURL(storage mediaStorage, source, target string, now time.Time) 
 	q.Set("X-Amz-SignedHeaders", "host;x-amz-copy-source")
 	u.RawQuery = q.Encode()
 	canonical := "PUT\n" + u.EscapedPath() + "\n" + u.RawQuery + "\nhost:" + u.Host + "\nx-amz-copy-source:" + sourceHeader + "\n\nhost;x-amz-copy-source\nUNSIGNED-PAYLOAD"
-	signedText := "AWS4-HMAC-SHA256\n" + stamp + "\n" + scope + "\n" + hexHash(canonical)
-	key := hmacSHA([]byte("AWS4"+storage.secret), date)
-	key = hmacSHA(key, storage.region)
-	key = hmacSHA(key, "s3")
-	key = hmacSHA(key, "aws4_request")
-	q.Set("X-Amz-Signature", fmt.Sprintf("%x", hmacSHA(key, signedText)))
+	q.Set("X-Amz-Signature", sigV4Signature(storage.secret, storage.region, date, stamp, scope, canonical))
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

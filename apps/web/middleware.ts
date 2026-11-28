@@ -9,7 +9,7 @@ export async function middleware(req:NextRequest){
   const response=NextResponse.redirect(new URL("/login?session=expired",req.url));
   return clearAuthCookies(response);
  }
- const renewal=await renewSession(refresh);
+ const renewal=await renewSession(refresh,req.headers);
  if(renewal.status==="unavailable")return new NextResponse("Authentication service temporarily unavailable",{status:503,headers:{"Cache-Control":"no-store"}});
  if(renewal.status!=="ok"){
   const response=NextResponse.redirect(new URL("/login?session=expired",req.url));

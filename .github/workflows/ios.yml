@@ -1,7 +1,7 @@
 name: iOS SwiftUI build
 on:
   push:
-    branches: [feat/ios-foundation]
+    branches: [main, feat/ios-foundation, feat/production-connectivity-testflight]
     paths:
       - "apps/ios/**"
       - ".github/workflows/ios.yml"
@@ -14,7 +14,7 @@ permissions:
 jobs:
   simulator-build:
     runs-on: macos-15
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
@@ -22,18 +22,23 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
         working-directory: apps/ios
-      - name: Compile iOS simulator application (no signing)
+      - name: Compile local simulator Debug
         run: |
           xcodebuild -project Inspectly.xcodeproj -scheme Inspectly \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug CODE_SIGNING_ALLOWED=NO build
         working-directory: apps/ios
-
-      - name: Compile Staging and verify packaged API endpoint
+      - name: Check staging and production configurations
+        run: python3 scripts/check_release_configuration.py
+        working-directory: apps/ios
+      - name: Compile Staging and Release with CI-only HTTPS origins
         run: |
-          xcodebuild -project Inspectly.xcodeproj -scheme Inspectly-Staging \
-            -destination 'generic/platform=iOS Simulator' \
-            -configuration Staging -derivedDataPath /tmp/inspectly-staging-build CODE_SIGNING_ALLOWED=NO build
-          actual=$(/usr/libexec/PlistBuddy -c 'Print :InspectlyAPIBaseURL' /tmp/inspectly-staging-build/Build/Products/Staging-iphonesimulator/Inspectly.app/Info.plist)
-          test "$actual" = 'https://staging-api.groupmax.ru'
+          set -euo pipefail
+          for configuration in Staging Release; do
+            xcodebuild -project Inspectly.xcodeproj -scheme Inspectly \
+              -destination 'generic/platform=iOS Simulator' \
+              -configuration "$configuration" \
+              INSPECTLY_API_BASE_URL="https://ci-check.inspectly.app" \
+              CODE_SIGNING_ALLOWED=NO build
+          done
         working-directory: apps/ios

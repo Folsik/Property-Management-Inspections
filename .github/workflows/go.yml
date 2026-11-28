@@ -15,7 +15,11 @@ jobs:
           cache: true
       - run: go mod download
       - name: Ensure gofmt clean
-        run: test -z "$(gofmt -l $(find cmd internal -name '*.go'))"
+        run: |
+          unformatted="$(gofmt -l $(find cmd internal -name '*.go'))"
+          printf '%s\n' "$unformatted"
+          if [ -n "$unformatted" ]; then gofmt -d $unformatted; fi
+          test -z "$unformatted"
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/api

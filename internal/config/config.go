@@ -6,12 +6,13 @@ import (
 )
 
 type Config struct {
-	Env            string
-	HTTPAddr       string
-	DatabaseURL    string
-	JWTIssuer      string
-	JWTPrivateKey  string
-	AccessTokenTTL time.Duration
+	Env              string
+	HTTPAddr         string
+	DatabaseURL      string
+	JWTIssuer        string
+	JWTPrivateKey    string
+	AccessTokenTTL   time.Duration
+	TrustedBFFSecret string
 }
 
 func Load() Config {
@@ -20,12 +21,13 @@ func Load() Config {
 		ttl = 15 * time.Minute
 	}
 	return Config{
-		Env:            get("APP_ENV", "development"),
-		HTTPAddr:       get("HTTP_ADDR", ":8080"),
-		DatabaseURL:    get("DATABASE_URL", "postgres://inspections:inspections_dev_password@localhost:5432/inspections?sslmode=disable"),
-		JWTIssuer:      get("JWT_ISSUER", "inspections-api"),
-		JWTPrivateKey:  get("JWT_PRIVATE_KEY", ""),
-		AccessTokenTTL: ttl,
+		Env:              environment(),
+		HTTPAddr:         get("HTTP_ADDR", ":8080"),
+		DatabaseURL:      get("DATABASE_URL", "postgres://inspections:inspections_dev_password@localhost:5432/inspections?sslmode=disable"),
+		JWTIssuer:        get("JWT_ISSUER", "inspections-api"),
+		JWTPrivateKey:    get("JWT_PRIVATE_KEY", ""),
+		AccessTokenTTL:   ttl,
+		TrustedBFFSecret: os.Getenv("TRUSTED_BFF_SECRET"),
 	}
 }
 
@@ -34,4 +36,12 @@ func get(k, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// Only an explicit development value enables development credentials and OTPs.
+func environment() string {
+	if os.Getenv("APP_ENV") == "development" {
+		return "development"
+	}
+	return "production"
 }

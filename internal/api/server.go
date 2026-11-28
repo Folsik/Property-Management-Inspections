@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,10 +28,25 @@ type Server struct {
 	logger            *slog.Logger
 	env               string
 	storageHTTPClient *http.Client
+	trustedBFFSecret  string
+	refreshReplayKey  [32]byte
 }
 
 func New(db *pgxpool.Pool, tokens *auth.Manager, logger *slog.Logger, env string) *Server {
-	return &Server{db: db, tokens: tokens, logger: logger, env: env, storageHTTPClient: &http.Client{Timeout: 10 * time.Second}}
+	s := &Server{db: db, tokens: tokens, logger: logger, env: env, storageHTTPClient: &http.Client{Timeout: 10 * time.Second}}
+	// Development-only ephemeral key; production calls ConfigureRefreshReplayKey.
+	if _, err := rand.Read(s.refreshReplayKey[:]); err != nil {
+		panic("secure randomness unavailable")
+	}
+	return s
+}
+
+// ConfigureRefreshReplayKey derives a separate AEAD key from the deployment's
+// persistent private signing key. Call before serving requests on every replica.
+func (s *Server) ConfigureRefreshReplayKey(signingSecret string) {
+	if signingSecret != "" {
+		s.refreshReplayKey = sha256.Sum256([]byte("inspectly-refresh-replay-v1:" + signingSecret))
+	}
 }
 
 type key string
@@ -63,8 +79,8 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("DELETE /v1/auth/sessions/{session}", s.protect(http.HandlerFunc(s.revokeAuthSession)))
 	m.Handle("GET /v1/onboarding", s.protect(http.HandlerFunc(s.onboardingStatus)))
 	m.Handle("POST /v1/onboarding/complete", s.protect(http.HandlerFunc(s.completeOnboarding)))
-	m.Handle("POST /v1/email/request", s.protect(http.HandlerFunc(s.requestEmailOTP)))
-	m.Handle("POST /v1/email/verify", s.protect(http.HandlerFunc(s.verifyEmailOTP)))
+	m.Handle("POST /v1/email/request", s.protect(s.limitAuth("email-request", 60, 10*time.Minute, s.requestEmailOTP)))
+	m.Handle("POST /v1/email/verify", s.protect(s.limitAuth("email-verify", 120, 10*time.Minute, s.verifyEmailOTP)))
 	m.Handle("POST /v1/invitations/{token}/accept", s.protect(http.HandlerFunc(s.acceptInvitation)))
 	m.Handle("POST /v1/organizations", s.protect(http.HandlerFunc(s.createOrganization)))
 	m.Handle("GET /v1/organizations", s.protect(http.HandlerFunc(s.listOrganizations)))
@@ -103,7 +119,7 @@ func (s *Server) Handler() http.Handler {
 	m.Handle("POST /v1/organizations/{org}/inspections/{inspection}/media/{media}/confirm", s.protect(http.HandlerFunc(s.confirmMedia)))
 	m.Handle("GET /v1/organizations/{org}/inspections/{inspection}/media/{media}/download", s.protect(http.HandlerFunc(s.downloadMedia)))
 	m.Handle("DELETE /v1/organizations/{org}/inspections/{inspection}/media/{media}", s.protect(http.HandlerFunc(s.deleteMedia)))
-	return requestID(recoverer(s.logger)(securityHeaders(m)))
+	return requestID(s.logger, recoverer(s.logger)(securityHeaders(m)))
 }
 func write(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -202,6 +218,9 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "phone must be E.164")
 		return
 	}
+	if !s.limitIdentifier(w, r, "otp-request", in.Phone, 3, 15*time.Minute) {
+		return
+	}
 	var count int
 	err := s.db.QueryRow(r.Context(), "SELECT count(*) FROM otp_challenges WHERE phone=$1 AND created_at>now()-interval '15 minutes'", in.Phone).Scan(&count)
 	if err != nil {
@@ -228,27 +247,27 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "OTP provider not configured")
 		return
 	}
-	// Keep challenge insertion atomic with provider delivery: unsuccessful sends never
-	// produce a usable OTP record. Production responses never expose the secret code.
-	tx, err := s.db.Begin(r.Context())
+	// Reserve the challenge before network I/O. A pending challenge cannot be
+	// verified until delivery is confirmed; no DB transaction spans Twilio.
+	var challengeID string
+	err = s.db.QueryRow(r.Context(), `INSERT INTO otp_challenges(phone,code_hash,expires_at)
+ VALUES($1,$2,now()+interval '5 minutes') RETURNING id`, in.Phone, string(hash)).Scan(&challengeID)
 	if err != nil {
-		fail(w, 503, "unavailable")
-		return
-	}
-	defer tx.Rollback(r.Context())
-	_, err = tx.Exec(r.Context(), "INSERT INTO otp_challenges(phone,code_hash,expires_at) VALUES($1,$2,now()+interval '5 minutes')", in.Phone, string(hash))
-	if err != nil {
+		s.logDatabaseError(r, "reserve OTP", err)
 		fail(w, 503, "unavailable")
 		return
 	}
 	if twilio.configured() {
 		if err := sendTwilioSMS(r.Context(), twilio, in.Phone, "Your Inspectly verification code is "+code+". It expires in 5 minutes."); err != nil {
-			s.logger.Error("OTP provider delivery failed", "error", err)
+			s.logger.Error("OTP provider delivery failed", "request_id", requestIDFromContext(r.Context()), "error", err)
+			_, _ = s.db.Exec(r.Context(), "DELETE FROM otp_challenges WHERE id=$1 AND delivery_confirmed_at IS NULL", challengeID)
 			fail(w, 503, "OTP delivery unavailable")
 			return
 		}
 	}
-	if err := tx.Commit(r.Context()); err != nil {
+	_, err = s.db.Exec(r.Context(), "UPDATE otp_challenges SET delivery_confirmed_at=now() WHERE id=$1 AND expires_at>now()", challengeID)
+	if err != nil {
+		s.logDatabaseError(r, "confirm OTP delivery", err)
 		fail(w, 503, "unavailable")
 		return
 	}
@@ -272,6 +291,9 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid phone or code")
 		return
 	}
+	if !s.limitIdentifier(w, r, "otp-verify", in.Phone, 20, 10*time.Minute) {
+		return
+	}
 	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		fail(w, 503, "unavailable")
@@ -280,7 +302,7 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 	var id, hash string
 	var attempts int
-	err = tx.QueryRow(r.Context(), "SELECT id,code_hash,attempts FROM otp_challenges WHERE phone=$1 AND consumed_at IS NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1 FOR UPDATE", in.Phone).Scan(&id, &hash, &attempts)
+	err = tx.QueryRow(r.Context(), "SELECT id,code_hash,attempts FROM otp_challenges WHERE phone=$1 AND consumed_at IS NULL AND delivery_confirmed_at IS NOT NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1 FOR UPDATE", in.Phone).Scan(&id, &hash, &attempts)
 	if err != nil {
 		fail(w, 401, "invalid or expired OTP")
 		return
@@ -382,6 +404,9 @@ func (s *Server) pinLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if !phonePattern.MatchString(in.Phone) || len(in.PIN) != 6 {
 		fail(w, 401, "invalid credentials")
+		return
+	}
+	if !s.limitIdentifier(w, r, "legacy-pin-login", in.Phone, 20, 10*time.Minute) {
 		return
 	}
 	tx, err := s.db.Begin(r.Context())

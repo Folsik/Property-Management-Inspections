@@ -144,6 +144,7 @@ func (s *Server) setPassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "password already set")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, "", "auth.password_set", "user", who(r).UserID)
 	write(w, 200, map[string]string{"status": "password_set"})
 }
 
@@ -155,19 +156,16 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	tx, err := s.db.Begin(r.Context())
-	if err != nil {
-		fail(w, 503, "unavailable")
-		return
-	}
-	defer tx.Rollback(r.Context())
 	var phone, hash string
 	var email *string
-	err = tx.QueryRow(r.Context(), `SELECT phone,coalesce(password_hash,''),email FROM users WHERE id=$1 FOR UPDATE`, who(r).UserID).Scan(&phone, &hash, &email)
+	err := s.db.QueryRow(r.Context(), `SELECT phone,coalesce(password_hash,''),email
+ FROM users WHERE id=$1`, who(r).UserID).Scan(&phone, &hash, &email)
 	if err != nil {
+		s.logDatabaseError(r, "load password revision", err)
 		fail(w, 503, "unavailable")
 		return
 	}
+	// Both Argon2 verifications and the new hash run outside all transactions.
 	if hash == "" || !verifyPassword(hash, in.CurrentPassword) {
 		fail(w, 401, "invalid current password")
 		return
@@ -189,10 +187,25 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	_, err = tx.Exec(r.Context(), `UPDATE users SET password_hash=$2,failed_password_attempts=0,
- password_locked_until=NULL,auth_epoch=auth_epoch+1,updated_at=now() WHERE id=$1`, who(r).UserID, nextHash)
+	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		fail(w, 503, "unavailable")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	// CAS under the lock prevents a concurrent password change from using
+	// an outdated verification or resetting another session generation.
+	tag, err := tx.Exec(r.Context(), `UPDATE users SET password_hash=$3,
+ failed_password_attempts=0,password_locked_until=NULL,
+ auth_epoch=auth_epoch+1,updated_at=now()
+ WHERE id=$1 AND password_hash=$2`, who(r).UserID, hash, nextHash)
+	if err != nil {
+		s.logDatabaseError(r, "update password revision", err)
+		fail(w, 503, "unavailable")
+		return
+	}
+	if tag.RowsAffected() != 1 {
+		fail(w, 409, "password changed concurrently")
 		return
 	}
 	_, err = tx.Exec(r.Context(), `UPDATE auth_sessions SET revoked_at=now(),revocation_reason='password_changed'
@@ -205,6 +218,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
+	s.auditSecurityEvent(r, who(r).UserID, "", "auth.password_changed", "user", who(r).UserID)
 	write(w, 200, map[string]string{"status": "password_changed"})
 }
 
@@ -231,16 +245,14 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 401, "invalid credentials")
 		return
 	}
-	tx, err := s.db.Begin(r.Context())
-	if err != nil {
-		fail(w, 503, "unavailable")
+	if !s.limitIdentifier(w, r, "password-login", identifier, 20, 10*time.Minute) {
 		return
 	}
-	defer tx.Rollback(r.Context())
+	// Argon2 and bcrypt are never computed while holding a row lock.
 	var id, hash string
-	var locked *time.Time
-	err = tx.QueryRow(r.Context(), `SELECT id,coalesce(password_hash,''),password_locked_until FROM users
- WHERE phone=$1 OR (lower(email)=$1 AND email_verified_at IS NOT NULL) FOR UPDATE`, identifier).Scan(&id, &hash, &locked)
+	var nextAttempt *time.Time
+	err := s.db.QueryRow(r.Context(), `SELECT id,coalesce(password_hash,''),password_locked_until FROM users
+ WHERE phone=$1 OR (lower(email)=$1 AND email_verified_at IS NOT NULL)`, identifier).Scan(&id, &hash, &nextAttempt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = verifyPassword(dummyPasswordHash, in.Password)
 		fail(w, 401, "invalid credentials")
@@ -250,32 +262,44 @@ func (s *Server) passwordLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "unavailable")
 		return
 	}
-	if locked != nil && locked.After(time.Now()) {
-		fail(w, 429, "temporarily locked; try again later")
-		return
-	}
 	if hash == "" || !verifyPassword(hash, in.Password) {
-		_, err = tx.Exec(r.Context(), `UPDATE users SET failed_password_attempts=CASE WHEN failed_password_attempts>=4 THEN 0 ELSE failed_password_attempts+1 END,
-  password_locked_until=CASE WHEN failed_password_attempts>=4 THEN now()+interval '15 minutes' ELSE NULL END WHERE id=$1`, id)
-		if err != nil {
-			fail(w, 503, "unavailable")
+		if nextAttempt != nil && nextAttempt.After(time.Now()) {
+			fail(w, 401, "invalid credentials")
 			return
 		}
-		if err = tx.Commit(r.Context()); err != nil {
+		// Short bounded progressive backoff; a correct password is always allowed.
+		// Do not disclose account existence or lockout state in HTTP responses.
+		_, err = s.db.Exec(r.Context(), `UPDATE users SET
+ failed_password_attempts=LEAST(failed_password_attempts+1,10),
+ password_locked_until=now()+(LEAST(8,POWER(2,LEAST(failed_password_attempts,3)))::int * interval '1 second')
+ WHERE id=$1`, id)
+		if err != nil {
 			fail(w, 503, "unavailable")
 			return
 		}
 		fail(w, 401, "invalid credentials")
 		return
 	}
-	_, err = tx.Exec(r.Context(), `UPDATE users SET failed_password_attempts=0,password_locked_until=NULL WHERE id=$1`, id)
+	// Compare-and-swap prevents success using a password changed concurrently.
+	tag, err := s.db.Exec(r.Context(), `UPDATE users SET
+ failed_password_attempts=0,password_locked_until=NULL
+ WHERE id=$1 AND password_hash=$2`, id, hash)
 	if err != nil {
 		fail(w, 503, "unavailable")
 		return
 	}
-	if err = tx.Commit(r.Context()); err != nil {
-		fail(w, 503, "unavailable")
+	if tag.RowsAffected() != 1 {
+		fail(w, 401, "invalid credentials")
 		return
+	}
+	// Transparent migration from legacy bcrypt to Argon2id, without replacing
+	// a password that another request changed after the verification.
+	if strings.HasPrefix(hash, "$2") {
+		if next, hashErr := hashPassword(in.Password); hashErr == nil {
+			if _, err := s.db.Exec(r.Context(), "UPDATE users SET password_hash=$3 WHERE id=$1 AND password_hash=$2", id, hash, next); err != nil {
+				s.logger.Error("legacy password rehash failed", "error", err)
+			}
+		}
 	}
 	s.issue(w, r, id)
 }
